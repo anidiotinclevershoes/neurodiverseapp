@@ -4,7 +4,7 @@
 **Last verified:** 2026-08-31  
 **Kind:** current known-good state — start here before changing the codebase
 
-**verified_commit:** 1d8b67f plus follow-up UI/test commits on `cursor/phase-1a-prove-the-spine-6d7b`
+**verified_commit:** ae5132d on `cursor/phase-1a-prove-the-spine-6d7b`
 
 ---
 
