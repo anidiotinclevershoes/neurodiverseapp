@@ -1,8 +1,12 @@
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    // Persistence and HTTP tests share one Postgres; they must not reset schema in parallel.
+    fileParallelism: false,
+  },
   server: {
     port: 5173,
     proxy: {

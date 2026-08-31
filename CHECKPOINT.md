@@ -4,7 +4,7 @@
 **Last verified:** 2026-08-31  
 **Kind:** current known-good state — start here before changing the codebase
 
-**verified_commit:** Phase 1A branch head (update SHA on each merge)
+**verified_commit:** local 37/37 tests green after serializing Postgres-backed files (see branch head)
 
 ---
 

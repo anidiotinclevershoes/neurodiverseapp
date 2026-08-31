@@ -95,7 +95,7 @@ Defined in `.github/workflows/ci.yml`:
 | `npm run typecheck` | Block |
 | `npm run lint` | Block |
 | Domain import isolation grep | Block |
-| `npm test` (domain + application + Postgres + HTTP when `DATABASE_URL` set) | Block |
+| `npm test` (domain + application + Postgres + HTTP when `DATABASE_URL` set; files run serially so schema resets do not collide) | Block |
 | `npm run build` | Block |
 
 Advisory (do not block until they exist and are stable): coverage percentages, visual snapshots, lighthouse.
