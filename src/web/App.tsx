@@ -184,25 +184,32 @@ export function App() {
         <h1>NDApp</h1>
         <p>Sign in to the shared household budget. This is the spine, not the finished Budget Button.</p>
         <p className={`status ${status === "error" ? "error" : ""}`}>{message}</p>
-        <label>
-          Email
-          <input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
-          />
-        </label>
-        <button type="button" onClick={() => void sign("/auth/sign-in")} disabled={status === "loading"}>
-          Sign in
-        </button>
-        <button type="button" className="secondary" onClick={() => void sign("/auth/sign-up")} disabled={status === "loading"}>
-          Create account
-        </button>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void sign("/auth/sign-in");
+          }}
+        >
+          <label>
+            Email
+            <input value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+            />
+          </label>
+          <button type="submit" disabled={status === "loading"}>
+            Sign in
+          </button>
+          <button type="button" className="secondary" onClick={() => void sign("/auth/sign-up")} disabled={status === "loading"}>
+            Create account
+          </button>
+        </form>
       </main>
     );
   }
@@ -227,15 +234,17 @@ export function App() {
     <main className="page">
       <h1>August 2026</h1>
       <p className={`status ${status === "save-failed" || status === "conflict" || status === "error" ? "error" : status}`}>
-        {status === "saving"
-          ? "Saving…"
-          : status === "saved"
-            ? "Saved"
-            : status === "unsaved"
-              ? "Unsaved"
-              : status === "loading"
-                ? "Loading…"
-                : message}
+        {message
+          ? message
+          : status === "saving"
+            ? "Saving…"
+            : status === "saved"
+              ? "Saved"
+              : status === "unsaved"
+                ? "Unsaved"
+                : status === "loading"
+                  ? "Loading…"
+                  : ""}
       </p>
       <label>
         Monthly income ({view.currency})
@@ -245,6 +254,7 @@ export function App() {
           onChange={(event) => {
             setIncome(event.target.value);
             setStatus("unsaved");
+            setMessage("");
           }}
         />
       </label>
@@ -255,6 +265,7 @@ export function App() {
           onChange={(event) => {
             setCategoryName(event.target.value);
             setStatus("unsaved");
+            setMessage("");
           }}
         />
       </label>
@@ -266,6 +277,7 @@ export function App() {
           onChange={(event) => {
             setAllocation(event.target.value);
             setStatus("unsaved");
+            setMessage("");
           }}
         />
       </label>

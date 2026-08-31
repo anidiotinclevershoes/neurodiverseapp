@@ -37,6 +37,10 @@ label,
   font-size: 1rem;
 }
 
+form {
+  display: contents;
+}
+
 label {
   display: flex;
   flex-direction: column;

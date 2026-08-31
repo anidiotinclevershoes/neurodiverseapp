@@ -8,6 +8,7 @@ export default defineConfig({
     fileParallelism: false,
   },
   server: {
+    host: true,
     port: 5173,
     proxy: {
       "/auth": "http://127.0.0.1:3000",

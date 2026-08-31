@@ -19,7 +19,7 @@ npm test
 npm run dev
 ```
 
-Open http://127.0.0.1:5173 — create two accounts, create a household, add the second email, save income and one allocation, refresh on the other session.
+Open http://localhost:5173 — create two accounts, create a household, add the second email, save income and one allocation, refresh on the other session. Vite listens on the LAN as well so a phone on the same network can open `http://<dev-machine>:5173`. There is no public deploy yet.
 
 ## Docs
 
