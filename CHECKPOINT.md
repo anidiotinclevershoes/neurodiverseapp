@@ -4,7 +4,7 @@
 **Last verified:** 2026-08-31  
 **Kind:** current known-good state — start here before changing the codebase
 
-**verified_commit:** ae5132d on `cursor/phase-1a-prove-the-spine-6d7b`
+**verified_commit:** 1a02e33 on `cursor/phase-1a-prove-the-spine-6d7b` (GitHub CI green)
 
 ---
 
@@ -42,6 +42,7 @@ Fresh schema: first API start with `APPLY_SCHEMA=1` applies `supabase/shims/auth
 - Failed store update → UNAVAILABLE; authoritative income stays at the previous value; retry works.
 - Unauthenticated HTTP `/month` is 401.
 - Domain tests remain green. Persistence tests run against real Postgres when `DATABASE_URL` is set.
+- GitHub CI (`Typecheck, lint, tests, build` with Postgres 16) is green on this commit.
 
 ## What is not proven
 
