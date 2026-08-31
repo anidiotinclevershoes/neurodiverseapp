@@ -19,15 +19,15 @@ We are **not** building a generic ND life operating system.
 ## Layers
 
 ```
-UI  (React, later — not in Phase 0)
-  ↓  commands / queries (plain objects)
-Application / use cases
+UI  (Vite + React — Phase 1A spine only)
+  ↓  HTTP commands (JWT)
+Application / use cases   ← src/application/budget-app.ts
   ↓  BudgetInput  →  BudgetResult
-Budget domain engine   ← pure TypeScript, deterministic
-  ↓  persistence port (later)
-Persistence adapter    ← Supabase (chosen; not provisioned in Phase 0)
+Budget domain engine
+  ↓  BudgetStore port
+Postgres adapter          ← src/persistence/postgres.ts
   ↓
-Postgres
+PostgreSQL 16 (Supabase-shaped RLS; hosted Supabase not provisioned)
 ```
 
 ### Dependency rules
@@ -36,7 +36,7 @@ Postgres
 | --- | --- | --- |
 | Domain (`src/domain`) | Standard library only | React, DOM, fetch, Supabase, env, clocks |
 | Application | Domain, persistence **port** types | UI components, CSS, navigation |
-| Persistence adapter | Application port, Supabase SDK, domain types for mapping | React |
+| Persistence adapter | Application port, `pg`, domain types for mapping | React |
 | UI | Application API, domain **result types** for display | SQL, RLS, service role keys |
 
 The same `BudgetInput` must always produce the same `BudgetResult`. That is why the engine is a pure function (`calculateBudget`).
@@ -47,7 +47,7 @@ Deviation considered and rejected: putting remaining-amount math in SQL or in Re
 
 ## Data ownership
 
-**Authoritative:** server-side household records (planned: Postgres via Supabase).
+**Authoritative:** server-side household records (Phase 1A: PostgreSQL 16; hosted Supabase still the intended production home).
 
 **Derived:** anything `calculateBudget` returns. Derived values may be stored as a cache or as a closed-month snapshot, but live months are always recomputable from inputs.
 
@@ -69,7 +69,7 @@ See `DECISIONS/0003-household-sync-manual-refresh.md`.
 - Stale save: refuse; never clobber quietly.
 - Failed save: UI stays in an error/unsaved state. Success chrome is forbidden until the server confirms.
 - Offline: V1 is online-required for writes. Reads may show last-known data **labelled as possibly stale**.
-- Duplicate submit: `commandId` idempotency; disable submit until the in-flight save resolves.
+- Duplicate submit: UI disables Save while a save is in flight. A `processed_commands` table is still deferred (TD-12).
 
 ---
 
@@ -87,7 +87,7 @@ See `DECISIONS/0003-household-sync-manual-refresh.md`.
 
 See `DECISIONS/0005-auth-supabase.md`.
 
-- Authentication: Supabase Auth (email OTP for V1).
+- Authentication: email + password JWT against `app_users` (Phase 1A). OTP remains the intended hosted path (ADR 0005, 0009).
 - Authorization: Postgres RLS on every exposed table. Policies check `auth.uid()` membership in `household_members`.
 - The browser never receives the service-role key.
 - Client-supplied `household_id` is a parameter, not a permission.
@@ -116,45 +116,31 @@ See `DECISIONS/0007-history-month-snapshots.md`.
 
 ---
 
-## Schema direction (not created in Phase 0)
+## Schema (Phase 1A actually created)
 
-Intended tables (names may tighten at migration time):
+Tables in `supabase/migrations/20260831200000_phase1a_spine.sql`:
 
-- `households` (`id`, `currency`, `created_at`)
-- `household_members` (`household_id`, `user_id`, `created_at`) unique `(household_id, user_id)`
-- `accounts` (`id`, `household_id`, `name`, `is_payday`, `created_at`, `revision`)
-- `categories` (`id`, `household_id`, `name`, `protect`, `created_at`, `revision`)
-- `budget_months` (`id`, `household_id`, `year`, `month`, `status`, `revision`, `closed_snapshot`) unique `(household_id, year, month)`
-- `month_incomes` (`id`, `month_id`, `amount_minor`, `payday_on`, `label`) — V1 UI may expose one row; the engine receives the **sum** (and later per-payday splits)
-- `month_bills` (`id`, `month_id`, `name`, `amount_minor`, `account_id`)
-- `month_extra_transfers` (`id`, `month_id`, `from_account_id`, `to_account_id`, `amount_minor`) — non-bill moves (e.g. to savings). **Never** a second copy of bill-funding
-- `month_allocations` (`month_id`, `category_id`, `amount_minor`)
-- `month_spend` (`id`, `month_id`, `amount_minor`, `category_id`, `unexpected`, `occurred_on`, `note`)
-- `processed_commands` (`command_id`, `household_id`, `result`) — idempotency
+- `app_users`
+- `households`
+- `household_members`
+- `budget_months` (`income_minor`, `revision`, year, month)
+- `categories`
+- `month_allocations`
 
-Templates for “default bills” can wait. Copying last month into a new open month is an application command, not a live reference to a mutable template.
+Not created yet (still the V1 direction): accounts, month_incomes lines, bills, extras, spend, processed_commands, closed_snapshot.
 
-`openingRollover` is a named engine input that is **always 0 in V1** so later rollover cannot rewrite conservation by stealth.
+Phase 1A mapper supplies a synthetic payday account so `calculateBudget` can run without an accounts table.
 
-RLS: enable on every exposed table; revoke broad `anon` grants; `authenticated` policies all of the form “uid is a member of this row’s household”.
+**Write path:** Hono command API. Role `ndapp_authenticated` has SELECT only. Membership is loaded from `household_members`, never from a client “I am a member” flag.
 
-**Write path:** the browser must **not** `update()` budget tables directly. Mutations go through an application **command** (one authenticated write API or security-definer functions). Clients may `SELECT` via RLS. This stops a crafted client from skipping invariants and snapshots.
+## Application commands (Phase 1A)
 
----
+- `household.create` / `addMember` (email of an existing user)
+- `month.get` / `setIncome` / `setAllocation` / `saveMonth`
 
-## Application commands (V1, not implemented)
+`recordSpend` is not implemented (explicit Phase 1A non-goal). Future V1 tables (accounts, bills, extras, spend, income lines, processed_commands) stay deferred.
 
-Plain-object intents, not framework magic:
-
-- `household.create`
-- `household.addMember` (V1-minimal: add by email/user id of an already-signed-in or invited user)
-- `month.open`
-- `month.setIncome`
-- `month.setAllocation`
-- `month.recordSpend`
-- `month.refresh` (query)
-
-Payday bills/accounts and extra transfers follow after the first slice. Do not invent a command bus, event bus, or `{ state, events }` persistence. Commands are plain objects. Idempotency is a table, not a framework.
+`openingRollover` is still a named engine input that is **always 0 in V1**.
 
 ---
 
@@ -210,7 +196,7 @@ Payday bills/accounts and extra transfers follow after the first slice. Do not i
 
 ## First vertical slice
 
-Specified in `CHECKPOINT.md`. Not implemented in Phase 0.
+Implemented in Phase 1A. See `CHECKPOINT.md`. Two authenticated members share one August 2026 month; income + one allocation persist; `calculateBudget` is the only source of remaining / unallocated / headline; another household is isolated; stale revision is 409.
 
 ---
 
@@ -218,7 +204,7 @@ Specified in `CHECKPOINT.md`. Not implemented in Phase 0.
 
 Assets: household financial *plans* (income, bills, allocations, spend, notes), account emails, session tokens.
 
-Trust boundaries: browser UI | application running as the user | Postgres+RLS | Supabase Auth | email provider (OTP mail).
+Trust boundaries: browser UI | Hono command API | Postgres+RLS | `app_users` password JWT (hosted Supabase Auth later).
 
 | Threat | V1 control |
 | --- | --- |
@@ -226,9 +212,9 @@ Trust boundaries: browser UI | application running as the user | Postgres+RLS | 
 | Client sends another household’s id | Policy ignores the wish; returns zero rows |
 | Stolen publishable key | Expected public; useless without a user session and membership |
 | Stolen service role | Operational disaster — key never ships to clients; rotate if leaked |
-| Account takeover (email) | Magic link to the member’s mailbox; no SMS recovery in V1 |
-| Invite abuse | No public join codes in V1; add member only from an existing member session |
-| Log leakage | Do not log amounts, tokens, or magic-link URLs at info level |
+| Account takeover (email) | Password JWT today; OTP mail when hosted Supabase Auth is connected; no SMS recovery in V1 |
+| Invite abuse | No public join codes; add member from an existing member session; unknown emails are a silent no-op |
+| Log leakage | Do not log amounts, tokens, or passwords at info level |
 | XSS stealing session | Standard web hygiene when UI exists (framework defaults, no `dangerouslySetInnerHTML` for notes without a later decision) |
 | Tampered minor units / floats | Parse and `assertMinorUnits` before persist |
 | User claims “I am admin” in JWT user_metadata | Ignored; membership table only |
@@ -251,12 +237,14 @@ Out of V1: mandatory MFA, formal pentest program, HSM, field-level encryption at
 | Invalid money string | Validation error, no write |
 | Migration mismatch | App must not boot against an unknown schema silently — fail startup/health when we have a server |
 
-## Phase 0 code map
+## Phase 1A code map
 
 ```
-src/domain/money.ts     integer money
-src/domain/budget.ts    calculateBudget, removeCategory
-src/domain/*.test.ts    domain + invariant tests
+src/domain/              money + calculateBudget (unchanged Phase 0 rules)
+src/application/         createBudgetApp commands + MonthView mapping
+src/persistence/         Postgres store, migrations helper
+src/server/              Hono command API + password JWT
+src/web/                 minimal mobile-first spine UI
+supabase/migrations/     Phase 1A schema + RLS
+supabase/shims/          auth.uid() for vanilla Postgres
 ```
-
-No UI, no Supabase client, no application handlers yet. That is intentional.

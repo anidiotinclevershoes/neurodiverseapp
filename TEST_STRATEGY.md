@@ -12,13 +12,13 @@ We do not chase a decorative pyramid. We test the places this product will actua
 
 | Layer | What it protects | Tool (V1) | When |
 | --- | --- | --- | --- |
-| Domain unit | Money + `calculateBudget` + invariants | Vitest | **Now** (Phase 0) |
-| Application | Command handling, revision, mapping | Vitest | First vertical slice |
-| Persistence | Writes, reload equality, migrations | Vitest + Supabase local / SQL tests | First slice |
-| Security | Household isolation, unauthenticated deny | SQL tests + API tests | First slice — **merge-blocking** |
-| UI integration | Intent submitted matches command | Vitest + Testing Library (later) | When UI exists |
-| E2E journey | Two-user refresh / isolation in a browser | Playwright | After UI exists |
-| Native E2E | — | Not in V1 (web-first) | Only if we later wrap (Capacitor) or rewrite (Expo) |
+| Domain unit | Money + `calculateBudget` + invariants | Vitest | Now |
+| Application | Command handling, revision, mapping | Vitest (memory store) | Now |
+| Persistence | Writes, reload equality | Vitest + Postgres | Now |
+| Security | Household isolation, unauthenticated deny | Postgres RLS + HTTP | Now |
+| UI integration | Intent submitted matches command | Manual / browser | Phase 1A UI (thin) |
+| E2E journey | Two-user refresh / isolation in a browser | Playwright | Later |
+| Native E2E | — | Not in V1 (web-first) | Only if we later wrap |
 
 A previous project failed when layers looked healthy and **interactions** were wrong. Cross-layer journeys are first-class, not an afterthought.
 
@@ -50,7 +50,7 @@ The canonical example:
 > → both members’ derived figures match  
 > → a third user in another household still sees none of this
 
-Until UI exists, the same journey is tested from the application boundary (command in, persisted state + `BudgetResult` out) plus a second-actor refresh. The UI test is added when there is a UI.
+The same journey is tested from the application boundary (memory store), from Postgres + RLS, and from the HTTP command API. The UI is thin: it submits `/month/save` and displays `MonthView`. Browser two-session Playwright remains later.
 
 Other contracts:
 
@@ -79,9 +79,9 @@ Named in domain tests and in this list. They live next to the engine in `src/dom
 | INV-08 | Editing one month’s input object cannot mutate another month’s object |
 | INV-09 | Currency mismatch and non-integer money throw rather than coerce |
 | INV-10 | Exactly one payday account; unknown account/category references throw |
-| INV-11 | Failed persistence must not be reported as success *(application test — not yet implemented)* |
-| INV-12 | Household A cannot access household B *(persistence/RLS — not yet implemented)* |
-| INV-13 | Membership is enforced server-side *(RLS — not yet implemented)* |
+| INV-11 | Failed persistence must not be reported as success *(application: UNAVAILABLE; UI stays save-failed)* |
+| INV-12 | Household A cannot access household B *(Postgres RLS SELECT isolation + application NOT_FOUND)* |
+| INV-13 | Membership is enforced server-side *(household_members + RLS; client “I am a member” is ignored)* |
 | INV-14 | Closed snapshots remain stable when live catalogues change *(persistence — not yet implemented)* |
 
 ---
@@ -90,16 +90,13 @@ Named in domain tests and in this list. They live next to the engine in `src/dom
 
 Defined in `.github/workflows/ci.yml`:
 
-| Gate | Phase 0 | After first slice |
-| --- | --- | --- |
-| `npm run typecheck` | Block | Block |
-| `npm run lint` | Block | Block |
-| `npm test` (domain) | Block | Block |
-| Domain import isolation grep | Block | Block |
-| Persistence / RLS tests | n/a | **Block** |
-| Migration validation | n/a | **Block** |
-| Playwright E2E | n/a | Block once a smoke journey exists |
-| Build of the web app | n/a | Block once the app exists |
+| Gate | Phase 1A |
+| --- | --- |
+| `npm run typecheck` | Block |
+| `npm run lint` | Block |
+| Domain import isolation grep | Block |
+| `npm test` (domain + application + Postgres + HTTP when `DATABASE_URL` set) | Block |
+| `npm run build` | Block |
 
 Advisory (do not block until they exist and are stable): coverage percentages, visual snapshots, lighthouse.
 
@@ -126,10 +123,8 @@ Do not add a coverage threshold that encourages dummy tests.
 
 ---
 
-## Phase 0 vs later
+## Phase 1A vs later
 
-**Phase 0 (done):** Vitest, TypeScript, ESLint, domain money + budget invariant tests, GitHub Actions.
+**Phase 1A (done):** application command tests (real domain, memory port), Postgres round-trip, RLS isolation (SELECT + denied UPDATE), HTTP two-member journey, Vite build.
 
-**First slice:** application command tests (real domain, fake I/O ports — **never mock the engine**), persistence round-trip, RLS isolation, 409 stale revision, “save failed” behaviour, Food €500→€650 through persist+second user.
-
-**When UI exists:** one Playwright journey for the slice (two users, refresh, isolation if we can host two sessions).
+**When UI exists more fully:** Playwright two-session journey on real phones. The spine UI is exercised locally; it is not a CI E2E yet.

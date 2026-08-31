@@ -135,8 +135,19 @@ Unlikely near-term: AI analysis, bank-driven automation, multi-currency ledgers.
 
 ---
 
-## What Phase 0 delivered versus what V1 still needs
+## What Phase 1A delivered versus what V1 still needs
 
-Phase 0 established architecture, invariants, documentation, a pure domain engine, and CI. It did **not** ship The Budget Button.
+Phase 1A proved the spine: two people can sign in, share one household month, persist income and one allocation, see remaining amounts from the domain engine, refresh the same figures, and stay isolated from another household.
 
-The next authorised implementation step is the first vertical slice defined in `CHECKPOINT.md`.
+It did **not** ship The Budget Button payday checklist, bills, spend capture, or recovery UX.
+
+Implemented now (narrow):
+
+- email + password sign-in;
+- create household;
+- add a second member by existing account email;
+- edit income and one named allocation;
+- see unallocated / remaining / headline from the engine;
+- save, refresh, conflict and save-failed states.
+
+Still planned for later V1 slices: bills, accounts, payday transfers, spend, extras, OTP mail, hosted Supabase.

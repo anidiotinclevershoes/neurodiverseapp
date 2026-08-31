@@ -7,8 +7,25 @@ on:
 
 jobs:
   verify:
-    name: Typecheck, lint, domain tests
+    name: Typecheck, lint, tests, build
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ndapp
+          POSTGRES_PASSWORD: ndapp
+          POSTGRES_DB: ndapp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ndapp -d ndapp"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://ndapp:ndapp@localhost:5432/ndapp
+      JWT_SECRET: ci-not-a-production-secret
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,8 +37,9 @@ jobs:
       - run: npm run lint
       - name: Domain layer must not import UI, network, or persistence
         run: |
-          if grep -R -n -E "from ['\"]react|from ['\"]react-native|from ['\"]@supabase|from ['\"]expo" src/domain; then
+          if grep -R -n -E "from ['\"]react|from ['\"]react-native|from ['\"]@supabase|from ['\"]expo|from ['\"]pg|from ['\"]hono" src/domain; then
             echo "Domain code must stay independent of UI and persistence libraries"
             exit 1
           fi
       - run: npm test
+      - run: npm run build

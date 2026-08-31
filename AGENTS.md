@@ -7,6 +7,5 @@ You are working on **NDApp**.
 3. Treat `PRODUCT.md` and `ARCHITECTURE.md` as current truth **only after** checking they match the code.
 4. If docs and code disagree, investigate and reconcile. Do not guess.
 5. Do not implement real bank transfers or payments.
-6. Do not start The Budget Button UI, Household, or Heading Out unless `CHECKPOINT.md` says that is the next step.
-
-The first implementation step after Phase 0 is the vertical slice in `CHECKPOINT.md`.
+6. Do not implement real bank transfers or payments.
+7. The next product slice after Phase 1A is payday transfers (accounts + bills), not polish.
