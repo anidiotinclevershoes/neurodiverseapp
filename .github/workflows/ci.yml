@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    name: Typecheck, lint, domain tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Domain layer must not import UI, network, or persistence
+        run: |
+          if grep -R -n -E "from ['\"]react|from ['\"]react-native|from ['\"]@supabase|from ['\"]expo" src/domain; then
+            echo "Domain code must stay independent of UI and persistence libraries"
+            exit 1
+          fi
+      - run: npm test

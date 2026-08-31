@@ -1,0 +1,23 @@
+{
+  "name": "ndapp",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "NDApp — household executive-function support. Phase 0 is domain foundation only; the Budget Button UI is not in this package yet.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.9.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^4.1.11"
+  }
+}
