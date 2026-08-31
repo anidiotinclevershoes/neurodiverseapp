@@ -1,4 +1,4 @@
-# 0005 — Auth: Supabase Auth, magic link, equal members
+# 0005 — Auth: Supabase Auth, email OTP, equal members
 
 **Status:** accepted  
 **Date:** 2026-08-31  
@@ -6,19 +6,19 @@
 
 ## Context
 
-The first household is two adults on personal phones. We need real authentication and server-side membership checks without building an identity platform. This is sensitive financial *planning* data, not a bank.
+The first household is two adults on personal phones. We need real authentication and server-side membership checks without building an identity platform. This is sensitive financial *planning* data, not a bank. Magic-link URLs are consumed by some email scanners on mobile; a short OTP avoids that footgun and avoids App Links as a Phase 0 dependency.
 
 ## Decision
 
-- **Supabase Auth** with **email magic link** as the V1 sign-in (password auth is the fallback if deliverability fails — see `KNOWN_ISSUES.md`).
-- Sessions are Supabase-managed JWTs; treat expiry as a first-class UI failure.
-- Household membership is a **row in `household_members`**, verified in RLS with `auth.uid()`.
-- V1 members are **equal**. No admin/guest roles.
-- V1 invite: a signed-in member can add the other user’s id/email after that user has an account. No public unguessable-join-link v1 unless we later need it; a guessable household id must never grant access.
-- Do not implement MFA as mandatory for V1. Do not implement social OAuth unless magic link proves painful.
+- **Supabase Auth** (or equivalent) with **email one-time code** as the V1 sign-in. Codes are hashed, single-use, short TTL, rate-limited. Password is the fallback if email delivery is unusable (see `KNOWN_ISSUES.md`).
+- Sessions must be **revocable**. Membership is re-checked on **every** request (RLS + application). A still-valid login token does not keep household access after membership is gone.
+- Household membership is a **row in `household_members`**, never user-editable JWT `user_metadata`, never a client-supplied `household_id` grant.
+- V1 members are **equal**. No admin/guest roles. `created_by` is audit, not privilege.
+- V1 invite: member A enters B’s **email**; B signs in with that email and **confirms** join. No fridge codes, no join-by-household-id, no auto-join. Cap can wait until a third person exists; do not ship unbounded links.
+- Do not implement MFA as mandatory for V1. Do not add social OAuth unless OTP proves painful (if we do, Sign in with Apple is required on iOS).
 
 ## Consequences
 
-- Isolation tests are part of the first vertical slice.
+- Isolation tests (including revoked membership with the same session) are part of the first vertical slice.
 - Client code never uses the service-role key to “just attach” a membership.
-- Revoking membership (future) must be tested; JWT expiry is not enough if a still-valid token would otherwise keep reading rows — RLS membership check handles that on each query.
+- Failed OTP responses must not reveal whether an email is registered.

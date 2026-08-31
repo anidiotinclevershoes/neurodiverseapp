@@ -24,9 +24,18 @@ Ship V1 as a **mobile-first TypeScript web app** (Vite + React when UI work star
 - **PWA-first:** Android install is fine; iOS Add-to-Home-Screen is a multi-step Safari share-sheet (high executive-function cost). iOS web push is gated on that install, missing in some EU cases, and storage can be evicted. A PWA would not remove the need for a server and would not make two-phone sync easier.
 - **Capacitor now:** wraps the web app for stores without helping V1. Revisit if we need a store binary without rewriting UI.
 
+A Web App Manifest + icons may be added later so optional Add-to-Home-Screen looks named. That is metadata, not a service-worker PWA.
+
 ## Revisit when
 
-Reliable iOS payday reminders, home-screen widgets, or store distribution become product requirements. Then evaluate Expo as a **shell around the existing domain**, not a greenfield rewrite.
+Stay on the web until **one** of these is true:
+
+- iOS payday reminders are load-bearing and email/in-app is not enough;
+- home-screen widgets become a real requirement (impossible on web);
+- assisted A2HS still fails as a daily open path for these two users;
+- a public store listing is actually needed.
+
+**Default later wrap:** Capacitor around the existing web UI (domain and screens survive). **Expo** only if widgets force a native UI while the screen count is still small. Do not run Expo and a production web app as two UIs. Do not go native for pride or splash screens (App Store 4.2 punishes thin wraps).
 
 ## Consequences
 

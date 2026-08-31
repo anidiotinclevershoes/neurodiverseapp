@@ -65,11 +65,11 @@ See `DECISIONS/0003-household-sync-manual-refresh.md`.
 - Both household members read the same rows.
 - **Manual refresh** is the V1 consistency mechanism (pull-to-refresh and refresh after save).
 - **No realtime subscriptions in V1.**
-- **Last-write-wins** on a row, with a monotonic `revision` (or `updated_at` + revision) so the UI can detect “you edited a stale copy”.
-- Stale save: refuse or confirm-overwrite; never silently clobber without saying so.
+- Money writes use **optimistic concurrency** (`expectedRevision`). Mismatch → 409 + current view. Not silent last-write-wins.
+- Stale save: refuse; never clobber quietly.
 - Failed save: UI stays in an error/unsaved state. Success chrome is forbidden until the server confirms.
 - Offline: V1 is online-required for writes. Reads may show last-known data **labelled as possibly stale**.
-- Duplicate submit: idempotency key on commands, or disable submit until the in-flight save resolves.
+- Duplicate submit: `commandId` idempotency; disable submit until the in-flight save resolves.
 
 ---
 
@@ -87,7 +87,7 @@ See `DECISIONS/0003-household-sync-manual-refresh.md`.
 
 See `DECISIONS/0005-auth-supabase.md`.
 
-- Authentication: Supabase Auth (email magic link for V1).
+- Authentication: Supabase Auth (email OTP for V1).
 - Authorization: Postgres RLS on every exposed table. Policies check `auth.uid()` membership in `household_members`.
 - The browser never receives the service-role key.
 - Client-supplied `household_id` is a parameter, not a permission.
@@ -125,14 +125,20 @@ Intended tables (names may tighten at migration time):
 - `accounts` (`id`, `household_id`, `name`, `is_payday`, `created_at`, `revision`)
 - `categories` (`id`, `household_id`, `name`, `protect`, `created_at`, `revision`)
 - `budget_months` (`id`, `household_id`, `year`, `month`, `status`, `revision`, `closed_snapshot`) unique `(household_id, year, month)`
-- `month_incomes` (`id`, `month_id`, `amount_minor`, `payday_on`, `label`) — V1 UI may expose one row
+- `month_incomes` (`id`, `month_id`, `amount_minor`, `payday_on`, `label`) — V1 UI may expose one row; the engine receives the **sum** (and later per-payday splits)
 - `month_bills` (`id`, `month_id`, `name`, `amount_minor`, `account_id`)
+- `month_extra_transfers` (`id`, `month_id`, `from_account_id`, `to_account_id`, `amount_minor`) — non-bill moves (e.g. to savings). **Never** a second copy of bill-funding
 - `month_allocations` (`month_id`, `category_id`, `amount_minor`)
 - `month_spend` (`id`, `month_id`, `amount_minor`, `category_id`, `unexpected`, `occurred_on`, `note`)
+- `processed_commands` (`command_id`, `household_id`, `result`) — idempotency
 
 Templates for “default bills” can wait. Copying last month into a new open month is an application command, not a live reference to a mutable template.
 
+`openingRollover` is a named engine input that is **always 0 in V1** so later rollover cannot rewrite conservation by stealth.
+
 RLS: enable on every exposed table; revoke broad `anon` grants; `authenticated` policies all of the form “uid is a member of this row’s household”.
+
+**Write path:** the browser must **not** `update()` budget tables directly. Mutations go through an application **command** (one authenticated write API or security-definer functions). Clients may `SELECT` via RLS. This stops a crafted client from skipping invariants and snapshots.
 
 ---
 
@@ -148,7 +154,7 @@ Plain-object intents, not framework magic:
 - `month.recordSpend`
 - `month.refresh` (query)
 
-Payday bills/accounts can follow immediately after the first slice. Do not invent a command bus library.
+Payday bills/accounts and extra transfers follow after the first slice. Do not invent a command bus, event bus, or `{ state, events }` persistence. Commands are plain objects. Idempotency is a table, not a framework.
 
 ---
 
@@ -157,10 +163,10 @@ Payday bills/accounts can follow immediately after the first slice. Do not inven
 1. **UI → Application:** command objects with `householdId`, `monthId`, `expectedRevision`, money as integer minor units (or a parsed string that the application converts **before** the engine).
 2. **Application → Domain:** `BudgetInput` in, `BudgetResult` out. No partial/optional silent defaults that hide missing accounts.
 3. **Application → Persistence:** write inputs, then read back; compare revision.
-4. **Persistence → Auth/RLS:** every read/write runs as the user, not as service role, except documented server jobs.
+4. **Persistence → Auth/RLS:** reads as the user. Writes through the command path. Service role is never in the client.
 5. **Reload contract:** GET after PUT returns the same authoritative inputs and the same derived result.
 6. **Second-member contract:** after refresh, member B’s `BudgetResult` equals member A’s.
-7. **Isolation contract:** household B’s queries return zero rows of household A’s data, including via guessed IDs.
+7. **Isolation contract:** household B’s queries return zero rows of household A’s data, including via guessed IDs. Missing-or-forbidden is **404**, not a leaky 403 that confirms the other household exists.
 
 ---
 
@@ -168,8 +174,9 @@ Payday bills/accounts can follow immediately after the first slice. Do not inven
 
 - **Household as tenancy root** — other NDApp modules can share identity later without rewriting money tables.
 - **Income as line items** — avoids a later painful column-to-table migration.
-- **Category `protect` flag** — avoids hard-coding “Savings”.
-- **Pure engine** — UI shell can change (web → Expo) without rewriting calculations.
+- **Extra transfers ≠ bill-funding** — named so payday math cannot double-count.
+- **Category `protect` flag** — avoids hard-coding “Savings” for the headline overlay.
+- **Pure engine** — UI shell can change (web → Capacitor/Expo) without rewriting calculations.
 
 ## Extension points deliberately not built
 
@@ -211,7 +218,7 @@ Specified in `CHECKPOINT.md`. Not implemented in Phase 0.
 
 Assets: household financial *plans* (income, bills, allocations, spend, notes), account emails, session tokens.
 
-Trust boundaries: browser UI | application running as the user | Postgres+RLS | Supabase Auth | email provider (magic links).
+Trust boundaries: browser UI | application running as the user | Postgres+RLS | Supabase Auth | email provider (OTP mail).
 
 | Threat | V1 control |
 | --- | --- |
@@ -236,7 +243,7 @@ Out of V1: mandatory MFA, formal pentest program, HSM, field-level encryption at
 | --- | --- |
 | Network unavailable | Writes do not claim success; reads may show last-known **as stale** |
 | Save fails | Error; local draft may remain editable; authoritative state unchanged |
-| Stale revision | Refuse save; ask to refresh |
+| Stale revision | **409** + current view; ask to refresh and retry; never silent overwrite |
 | Second member updated | Visible after refresh; no merge editor in V1 |
 | Duplicate submit | In-flight lock or idempotency key |
 | Session expired | Auth error; no financial calls as anon |

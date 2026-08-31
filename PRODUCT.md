@@ -71,10 +71,11 @@ Both members should see the same household budget state. True realtime is not re
 - recurring monthly bills, including which account each bill is paid from;
 - user-defined spending categories (no built-in “Food/Medical/Savings” taxonomy);
 - planned allocations into those categories;
-- a **protect** flag on a category (leftover in a protected envelope is not “safe to spend”; overspend of it still reduces the headline);
+- a **protect** flag on a category (leftover in a protected envelope is not treated as the headline “safe to spend”; overspend of it still reduces the headline);
+- optional **extra** planned manual transfers that are *not* bill-funding (for example payday account → savings). Bill-funding transfers are derived and must not be entered again as extras;
 - recorded spend, including unexpected spend.
 
-Planned manual transfers in V1 are **derived** (payday account → other accounts to cover those accounts’ bills). Users are not asked to design a transfer graph. They can mark a recommended transfer as done in a later slice; that is a record of a manual action, not an instruction to a bank.
+Payday bill-funding transfers in V1 are **derived** (payday account → other accounts to cover those accounts’ bills). Users are not asked to design a transfer graph. They can mark a recommended transfer as done in a later slice; that is a record of a manual action, not an instruction to a bank.
 
 ### Four V1 experiences
 

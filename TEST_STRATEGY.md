@@ -18,7 +18,7 @@ We do not chase a decorative pyramid. We test the places this product will actua
 | Security | Household isolation, unauthenticated deny | SQL tests + API tests | First slice — **merge-blocking** |
 | UI integration | Intent submitted matches command | Vitest + Testing Library (later) | When UI exists |
 | E2E journey | Two-user refresh / isolation in a browser | Playwright | After UI exists |
-| Native E2E | — | Not in V1 (web-first) | Only if we go Expo |
+| Native E2E | — | Not in V1 (web-first) | Only if we later wrap (Capacitor) or rewrite (Expo) |
 
 A previous project failed when layers looked healthy and **interactions** were wrong. Cross-layer journeys are first-class, not an afterthought.
 
@@ -37,17 +37,17 @@ A previous project failed when layers looked healthy and **interactions** were w
 
 ## Cross-layer contracts to protect
 
-Canonical example:
+The canonical example:
 
 > User changes Food allocation from €500 to €650  
 > → UI submits the correct intent  
 > → application handles the command  
 > → authoritative state changes  
 > → persistence succeeds  
-> → budget recalculates (`headlineSafeToSpend` and Food remaining move by €150)  
+> → budget recalculates (Food remaining is €650; unallocated falls by €150; headline does **not** increase — this is an earmark, not new income)  
 > → reload returns identical state  
 > → second household member sees €650 after refresh  
-> → both members’ safe-to-spend figures match  
+> → both members’ derived figures match  
 > → a third user in another household still sees none of this
 
 Until UI exists, the same journey is tested from the application boundary (command in, persisted state + `BudgetResult` out) plus a second-actor refresh. The UI test is added when there is a UI.
@@ -55,9 +55,11 @@ Until UI exists, the same journey is tested from the application boundary (comma
 Other contracts:
 
 1. Save failure does not flip UI/application state to “saved”.
-2. Stale `expectedRevision` does not silently overwrite.
+2. Stale `expectedRevision` returns **409** and does not silently overwrite.
 3. `removeCategory` reject-if-spent behaviour holds through persistence (row still present).
 4. Closed-month snapshot is unchanged when an open month is edited (once months exist).
+5. Isolation: unauthenticated 401; other household **404** on every resource type; revoked membership fails the next call with the same session.
+6. The golden Food €500→€650 fixture is reused at domain, application, persist, and query layers — same assertions, different drivers. Do not re-derive the maths in the UI.
 
 ---
 
@@ -67,7 +69,7 @@ Named in domain tests and in this list. They live next to the engine in `src/dom
 
 | ID | Rule |
 | --- | --- |
-| INV-01 | Plan identity: `income = bills + allocations + unallocated` (unallocated may be negative) |
+| INV-01 | Plan identity: `income = bills + extras + allocations + unallocated` (extras are 0 in the Phase 0 engine; unallocated may be negative) |
 | INV-02 | Determinism: same inputs → same `BudgetResult` |
 | INV-03 | Transfer recommendations + remain-in-payday = total bills (no double-count) |
 | INV-04 | Derived values come only from inputs; tests compare engine output, not a second formula in the UI |
@@ -128,6 +130,6 @@ Do not add a coverage threshold that encourages dummy tests.
 
 **Phase 0 (done):** Vitest, TypeScript, ESLint, domain money + budget invariant tests, GitHub Actions.
 
-**First slice:** application command tests, persistence round-trip, RLS isolation, “save failed” behaviour.
+**First slice:** application command tests (real domain, fake I/O ports — **never mock the engine**), persistence round-trip, RLS isolation, 409 stale revision, “save failed” behaviour, Food €500→€650 through persist+second user.
 
 **When UI exists:** one Playwright journey for the slice (two users, refresh, isolation if we can host two sessions).

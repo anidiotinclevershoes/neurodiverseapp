@@ -64,6 +64,27 @@ describe("calculateBudget", () => {
     expect(moved + result.remainInPaydayAccountMinor).toBe(result.totalBillsMinor);
   });
 
+  it("golden: Food allocation €500 → €650 moves remaining and headline by €150", () => {
+    const before = calculateBudget(sample());
+    const after = calculateBudget(
+      sample({
+        allocations: [
+          { categoryId: "food", amountMinor: eur("650") },
+          { categoryId: "savings", amountMinor: eur("300") },
+        ],
+      }),
+    );
+    const foodBefore = before.categories.find((c) => c.categoryId === "food");
+    const foodAfter = after.categories.find((c) => c.categoryId === "food");
+    expect(foodBefore?.plannedMinor).toBe(eur("500"));
+    expect(foodAfter?.plannedMinor).toBe(eur("650"));
+    expect((foodAfter?.plannedMinor ?? 0) - (foodBefore?.plannedMinor ?? 0)).toBe(eur("150"));
+    expect(foodAfter?.remainingMinor).toBe(eur("650"));
+    expect(after.unallocatedMinor - before.unallocatedMinor).toBe(eur("-150"));
+    // Earmarking leftover into Food is not new money; the headline must not jump.
+    expect(after.headlineSafeToSpendMinor).toBe(before.headlineSafeToSpendMinor);
+  });
+
   it("headline safe-to-spend excludes protected remaining but includes spend envelopes and buffer", () => {
     const result = calculateBudget(sample());
     // unallocated 1060 + food remaining 500 (savings 300 is protected leftover)
