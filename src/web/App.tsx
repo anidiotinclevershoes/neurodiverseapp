@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { formatMinorAsMajor } from "../domain/money.ts";
+import { getSupabase } from "./supabase-browser.ts";
 
 type MonthView = {
   householdId: string;
@@ -21,14 +22,14 @@ type ScreenStatus = "idle" | "loading" | "saving" | "saved" | "unsaved" | "save-
 
 const YEAR = 2026;
 const MONTH = 8;
-const API = "";
+const API = import.meta.env.VITE_API_URL ?? "";
 
 async function api(path: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${API}${path}`, init);
 }
 
 export function App() {
-  const [token, setToken] = useState<string | null>(() => sessionStorage.getItem("ndapp.token"));
+  const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [view, setView] = useState<MonthView | null>(null);
@@ -40,11 +41,20 @@ export function App() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    if (!token) {
-      return;
-    }
-    void refresh(token);
-  }, [token]);
+    void getSupabase()
+      .auth.getSession()
+      .then(({ data }) => {
+        const next = data.session?.access_token ?? null;
+        setToken(next);
+        if (next) {
+          void refresh(next);
+        }
+      })
+      .catch(() => {
+        setStatus("error");
+        setMessage("Sign-in is not configured.");
+      });
+  }, []);
 
   async function refresh(currentToken: string) {
     setStatus("loading");
@@ -75,21 +85,32 @@ export function App() {
     setCategoryName(next.categoryName);
   }
 
-  async function sign(path: "/auth/sign-in" | "/auth/sign-up") {
+  async function sign(kind: "in" | "up") {
     setStatus("loading");
-    const response = await api(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const body = (await response.json()) as { token?: string; message?: string };
-    if (!response.ok || !body.token) {
+    setMessage("");
+    try {
+      const auth = getSupabase().auth;
+      const result =
+        kind === "in"
+          ? await auth.signInWithPassword({ email, password })
+          : await auth.signUp({ email, password });
+      if (result.error) {
+        setStatus("error");
+        setMessage("That sign-in did not work");
+        return;
+      }
+      const access = result.data.session?.access_token;
+      if (!access) {
+        setStatus("error");
+        setMessage("Check your email to finish creating the account, then sign in.");
+        return;
+      }
+      setToken(access);
+      await refresh(access);
+    } catch {
       setStatus("error");
-      setMessage(body.message ?? "That sign-in did not work");
-      return;
+      setMessage("That sign-in did not work");
     }
-    sessionStorage.setItem("ndapp.token", body.token);
-    setToken(body.token);
   }
 
   async function createHousehold() {
@@ -171,7 +192,7 @@ export function App() {
   }
 
   function signOut() {
-    sessionStorage.removeItem("ndapp.token");
+    void getSupabase().auth.signOut();
     setToken(null);
     setView(null);
     setStatus("idle");
@@ -187,7 +208,7 @@ export function App() {
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            void sign("/auth/sign-in");
+            void sign("in");
           }}
         >
           <label>
@@ -206,7 +227,7 @@ export function App() {
           <button type="submit" disabled={status === "loading"}>
             Sign in
           </button>
-          <button type="button" className="secondary" onClick={() => void sign("/auth/sign-up")} disabled={status === "loading"}>
+          <button type="button" className="secondary" onClick={() => void sign("up")} disabled={status === "loading"}>
             Create account
           </button>
         </form>

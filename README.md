@@ -1,25 +1,34 @@
 # NDApp
 
-Mobile-first household support for neurodivergent adults. V1 is **The Budget Button**. Phase 1A proves the shared-household spine. It does not move money.
+Mobile-first household support for neurodivergent adults. V1 is **The Budget Button**. It does not move money.
 
 Start at [`CHECKPOINT.md`](CHECKPOINT.md).
 
-## Run locally
+## Local CI (no hosted secrets)
 
-PostgreSQL 16, then:
+PostgreSQL 16:
 
 ```bash
-cp .env.example .env
-# create role/database ndapp/ndapp if needed
 export DATABASE_URL=postgres://ndapp:ndapp@127.0.0.1:5432/ndapp
-export JWT_SECRET=dev-only-change-me
-export APPLY_SCHEMA=1
 npm install
 npm test
+npm run typecheck
+npm run lint
+npm run build
+```
+
+This path uses the test-only `auth.uid()` shim. It never talks to supabase.co.
+
+## Hosted development
+
+Copy `.env.example`. Point `DATABASE_URL` / `SUPABASE_*` / `VITE_SUPABASE_*` at a real project. Apply committed migrations only:
+
+```bash
+npm run migrate:hosted
 npm run dev
 ```
 
-Open http://localhost:5173 — create two accounts, create a household, add the second email, save income and one allocation, refresh on the other session. Vite listens on the LAN as well so a phone on the same network can open `http://<dev-machine>:5173`. There is no public deploy yet.
+Sign in with Supabase email + password. Add the second member by the email of an account that already exists.
 
 ## Docs
 

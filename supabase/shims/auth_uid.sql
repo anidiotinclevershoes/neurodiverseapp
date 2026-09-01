@@ -1,7 +1,15 @@
--- Vanilla Postgres stand-in for Supabase auth.uid().
--- Do not apply this on a hosted Supabase project (it already provides auth.uid()).
+-- LOCAL / CI ONLY.
+-- Do not apply this file to hosted Supabase. Hosted already provides auth.uid()
+-- and auth.users. listen.ts refuses APPLY_SCHEMA when DATABASE_URL is a
+-- supabase.co host.
 
 CREATE SCHEMA IF NOT EXISTS auth;
+
+CREATE TABLE IF NOT EXISTS auth.users (
+  id uuid PRIMARY KEY,
+  email text NOT NULL UNIQUE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
 CREATE OR REPLACE FUNCTION auth.uid()
 RETURNS uuid

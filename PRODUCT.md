@@ -150,4 +150,6 @@ Implemented now (narrow):
 - see unallocated / remaining / headline from the engine;
 - save, refresh, conflict and save-failed states.
 
-Still planned for later V1 slices: bills, accounts, payday transfers, spend, extras, OTP mail, hosted Supabase.
+Still planned for later V1 slices: bills, accounts, payday transfers, spend, extras.
+
+Phase 1B replaces Phase 1A custom JWT with Supabase Auth and targets a public HTTPS deploy. OTP mail is deferred (ADR 0010).

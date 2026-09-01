@@ -4,8 +4,8 @@ import { createMiddleware } from "hono/factory";
 import type { Pool } from "pg";
 import { AppError, createBudgetApp, type MonthView } from "../application/budget-app.ts";
 import { MoneyError, parseMajorToMinor } from "../domain/money.ts";
-import { createPostgresStore, insertUser } from "../persistence/postgres.ts";
-import { hashPassword, signUserToken, verifyPassword, verifyUserToken } from "./auth.ts";
+import { createPostgresStore } from "../persistence/postgres.ts";
+import type { AccessTokenVerifier } from "./supabase-auth.ts";
 
 type Env = {
   Variables: {
@@ -41,56 +41,25 @@ function errorBody(error: AppError): { error: string; message: string; current?:
   return body;
 }
 
-export function createHttpApp(pool: Pool, jwtSecret: string) {
+export function createHttpApp(pool: Pool, verifyAccessToken: AccessTokenVerifier) {
   const app = createBudgetApp(createPostgresStore(pool));
   const http = new Hono<Env>();
 
   http.use(
     "/*",
     cors({
-      origin: "*",
+      origin: process.env.CORS_ORIGIN ?? "*",
       allowHeaders: ["Content-Type", "Authorization"],
       allowMethods: ["GET", "POST", "OPTIONS"],
     }),
   );
 
-  http.post("/auth/sign-up", async (c) => {
-    const body = await c.req.json<{ email?: string; password?: string }>();
-    const email = body.email?.trim().toLowerCase() ?? "";
-    const password = body.password ?? "";
-    if (!email.includes("@") || password.length < 8) {
-      return c.json({ error: "VALIDATION", message: "Email and a password of 8+ characters are required" }, 400);
-    }
-    const id = crypto.randomUUID();
-    try {
-      await insertUser(pool, { id, email, passwordHash: hashPassword(password) });
-    } catch {
-      return c.json({ error: "VALIDATION", message: "Could not create that account" }, 400);
-    }
-    const token = await signUserToken(id, jwtSecret);
-    return c.json({ token });
-  });
+  http.get("/health", (c) => c.json({ ok: true }));
 
-  http.post("/auth/sign-in", async (c) => {
-    const body = await c.req.json<{ email?: string; password?: string }>();
-    const email = body.email?.trim().toLowerCase() ?? "";
-    const password = body.password ?? "";
-    const result = await pool.query<{ id: string; password_hash: string }>(
-      "SELECT id, password_hash FROM app_users WHERE email = $1",
-      [email],
-    );
-    const row = result.rows[0];
-    if (!row || !verifyPassword(password, row.password_hash)) {
-      return c.json({ error: "UNAUTHENTICATED", message: "That sign-in did not work" }, 401);
-    }
-    const token = await signUserToken(row.id, jwtSecret);
-    return c.json({ token });
-  });
-
-  http.use("/month/*", requireAuth(jwtSecret));
-  http.use("/month", requireAuth(jwtSecret));
-  http.use("/households", requireAuth(jwtSecret));
-  http.use("/households/*", requireAuth(jwtSecret));
+  http.use("/month/*", requireAuth(verifyAccessToken));
+  http.use("/month", requireAuth(verifyAccessToken));
+  http.use("/households", requireAuth(verifyAccessToken));
+  http.use("/households/*", requireAuth(verifyAccessToken));
 
   http.post("/households", async (c) => {
     const userId = c.get("userId");
@@ -211,7 +180,7 @@ export function createHttpApp(pool: Pool, jwtSecret: string) {
   return http;
 }
 
-function requireAuth(jwtSecret: string) {
+function requireAuth(verifyAccessToken: AccessTokenVerifier) {
   return createMiddleware<Env>(async (c, next) => {
     const header = c.req.header("authorization") ?? "";
     const token = header.startsWith("Bearer ") ? header.slice(7) : "";
@@ -219,7 +188,7 @@ function requireAuth(jwtSecret: string) {
       return c.json({ error: "UNAUTHENTICATED", message: "Sign in required" }, 401);
     }
     try {
-      c.set("userId", await verifyUserToken(token, jwtSecret));
+      c.set("userId", await verifyAccessToken(token));
       await next();
     } catch {
       return c.json({ error: "UNAUTHENTICATED", message: "Sign in required" }, 401);

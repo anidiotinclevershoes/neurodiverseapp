@@ -25,10 +25,9 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgres://ndapp:ndapp@localhost:5432/ndapp
-      JWT_SECRET: ci-not-a-production-secret
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -43,3 +42,28 @@ jobs:
           fi
       - run: npm test
       - run: npm run build
+      - name: Browser bundle must not contain privileged secrets
+        run: |
+          if grep -R -n -E "service_role|SUPABASE_SERVICE_ROLE|JWT_SECRET" dist; then
+            echo "Privileged secrets must not appear in the browser bundle"
+            exit 1
+          fi
+
+  hosted:
+    name: Hosted Supabase contracts
+    runs-on: ubuntu-latest
+    if: ${{ vars.NDAPP_HOSTED_TESTS == '1' }}
+    env:
+      NDAPP_HOSTED_TESTS: "1"
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      HOSTED_DATABASE_URL: ${{ secrets.HOSTED_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run src/persistence/hosted.test.ts

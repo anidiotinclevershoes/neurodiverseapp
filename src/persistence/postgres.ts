@@ -68,7 +68,7 @@ export function createPostgresStore(pool: Pool): BudgetStore {
     },
     async findUserIdByEmail(email) {
       const result = await pool.query<{ id: string }>(
-        "SELECT id FROM app_users WHERE email = $1",
+        "SELECT id FROM auth.users WHERE email = $1",
         [email],
       );
       return result.rows[0]?.id ?? null;
@@ -159,12 +159,9 @@ export function createPostgresStore(pool: Pool): BudgetStore {
   };
 }
 
-export async function insertUser(
+export async function insertAuthUser(
   client: Pool | PoolClient,
-  row: { id: string; email: string; passwordHash: string },
+  row: { id: string; email: string },
 ): Promise<void> {
-  await client.query(
-    "INSERT INTO app_users (id, email, password_hash) VALUES ($1, $2, $3)",
-    [row.id, row.email, row.passwordHash],
-  );
+  await client.query("INSERT INTO auth.users (id, email) VALUES ($1, $2)", [row.id, row.email]);
 }

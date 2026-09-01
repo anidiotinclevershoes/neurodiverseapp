@@ -1,8 +1,8 @@
 # 0009 — Phase 1A runs on Postgres with a Supabase-shaped schema
 
-**Status:** accepted  
+**Status:** superseded for production identity — see `0010` and `0012`. Local CI Postgres + shim remains.  
 **Date:** 2026-08-31  
-**Kind:** current decision
+**Kind:** historical decision (Phase 1A)
 
 ## Context
 

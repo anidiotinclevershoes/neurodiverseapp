@@ -101,14 +101,17 @@ REVOKE ALL ON SCHEMA private FROM PUBLIC;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'ndapp_authenticated') THEN
-    CREATE ROLE ndapp_authenticated NOLOGIN;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    CREATE ROLE authenticated NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    CREATE ROLE anon NOLOGIN;
   END IF;
 END
 $$;
 
-GRANT USAGE ON SCHEMA public TO ndapp_authenticated;
-GRANT USAGE ON SCHEMA private TO ndapp_authenticated;
-GRANT EXECUTE ON FUNCTION private.member_household_ids() TO ndapp_authenticated;
-GRANT SELECT ON households, household_members, budget_months, categories, month_allocations, app_users
-  TO ndapp_authenticated;
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT USAGE ON SCHEMA private TO authenticated;
+GRANT EXECUTE ON FUNCTION private.member_household_ids() TO authenticated;
+GRANT SELECT ON households, household_members, budget_months, categories, month_allocations
+  TO authenticated;
