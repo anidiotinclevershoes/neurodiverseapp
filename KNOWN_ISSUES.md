@@ -1,7 +1,7 @@
 # KNOWN_ISSUES.md
 
 **Status:** current  
-**Last verified:** 2026-08-31  
+**Last verified:** 2026-09-05  
 **Kind:** current debt, bugs, and concerns (not a changelog)
 
 ---
@@ -25,7 +25,7 @@ None known in the local Phase 1B gates.
 | TD-10 | UI month is hard-coded August 2026 | Low | Unchanged |
 | TD-11 | Synthetic payday account in the mapper | Info | Unchanged |
 | TD-12 | `processed_commands` idempotency table not built | Low | Unchanged |
-| TD-13 | Email confirmation setting is project config | Low | First household should auto-confirm so `signUp` returns a session |
+| TD-13 | Email confirmation stays disabled | Info | **Private V1 decision — revisit before any public or untrusted-user release.** Not a missing feature. |
 
 ---
 
@@ -42,17 +42,19 @@ None known in the local Phase 1B gates.
 
 ## Phase 1B security review
 
-Checked in code:
+Checked in code (ADR 0013):
 
-- RLS on household tables; `authenticated` SELECT only.
+- Production adapter runs as `authenticated` with the signed-in JWT `sub`. RLS is the isolation boundary.
+- `authenticated` may SELECT/INSERT/UPDATE rows that policies allow. Data API writes are rejected unless `app.command_adapter=1`.
 - Membership via `household_members` + `auth.uid()`.
-- Command API verifies Supabase `getUser`. Custom JWT issuer deleted.
-- Browser env is publishable URL + anon key only.
+- Command API verifies Supabase `getUser` and builds a per-request store. Custom JWT issuer deleted.
+- Browser env is publishable URL + anon key only. `DATABASE_URL` is server/runtime only.
 - Shim cannot apply to `supabase.co`.
 - Add-member unknown emails remain a silent no-op.
 - Bundle CI grep forbids `service_role` / `JWT_SECRET`.
+- Email confirmation is intentionally off for the trusted household.
 
-Must re-check on a live project: PostgREST isolation, service-role not in Vercel `VITE_*`, email confirm setting.
+Must re-check on a live project: hosted suite (`NDAPP_HOSTED_TESTS=1`), service-role not in Vercel `VITE_*`, Confirm email still disabled.
 
 ## Explicitly rejected (do not reintroduce)
 

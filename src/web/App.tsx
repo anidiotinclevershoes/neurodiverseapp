@@ -102,7 +102,7 @@ export function App() {
       const access = result.data.session?.access_token;
       if (!access) {
         setStatus("error");
-        setMessage("Check your email to finish creating the account, then sign in.");
+        setMessage("Could not start a session. Try signing in.");
         return;
       }
       setToken(access);

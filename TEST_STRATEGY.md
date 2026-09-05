@@ -1,7 +1,7 @@
 # TEST_STRATEGY.md
 
 **Status:** current  
-**Last verified:** 2026-08-31  
+**Last verified:** 2026-09-05  
 **Kind:** current test strategy
 
 ---
@@ -80,7 +80,7 @@ Named in domain tests and in this list. They live next to the engine in `src/dom
 | INV-09 | Currency mismatch and non-integer money throw rather than coerce |
 | INV-10 | Exactly one payday account; unknown account/category references throw |
 | INV-11 | Failed persistence must not be reported as success *(application: UNAVAILABLE; UI stays save-failed)* |
-| INV-12 | Household A cannot access household B *(Postgres RLS SELECT isolation + application NOT_FOUND)* |
+| INV-12 | Household A cannot access household B *(the production `createPostgresStore(pool, userId)` path, not only a standalone SET ROLE probe)* |
 | INV-13 | Membership is enforced server-side *(household_members + RLS; client “I am a member” is ignored)* |
 | INV-14 | Closed snapshots remain stable when live catalogues change *(persistence — not yet implemented)* |
 
@@ -127,7 +127,7 @@ Do not add a coverage threshold that encourages dummy tests.
 
 ## Phase 1B vs later
 
-**Local CI:** application commands, Postgres round-trip, RLS as role `authenticated`, HTTP journey with an injected verifier (custom `/auth/*` gone), Vite build, bundle secret grep.
+**Local CI:** application commands, Postgres round-trip through the user-scoped production adapter, RLS as role `authenticated`, HTTP journey with an injected verifier (custom `/auth/*` gone), password sign-in path without a confirmation flow, Vite build, bundle secret grep.
 
 **Hosted:** `src/persistence/hosted.test.ts` when `NDAPP_HOSTED_TESTS=1` — real `getUser`, PostgREST RLS, disposable users.
 

@@ -175,4 +175,45 @@ describeHttp("http spine", () => {
     });
     expect(invalid.status).toBe(400);
   });
+
+  it("production HTTP path cannot write another household", async () => {
+    await register("alice@example.com", "token-a");
+    await register("carol@example.com", "token-c");
+    const auth = (token: string) => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
+    await fetchApp("/households", {
+      method: "POST",
+      headers: auth("token-a"),
+      body: JSON.stringify({ currency: "EUR", year: 2026, month: 8 }),
+    });
+    await fetchApp("/month/income", {
+      method: "POST",
+      headers: auth("token-a"),
+      body: JSON.stringify({ year: 2026, month: 8, expectedRevision: 1, amount: "3000" }),
+    });
+    await fetchApp("/households", {
+      method: "POST",
+      headers: auth("token-c"),
+      body: JSON.stringify({ currency: "GBP", year: 2026, month: 8 }),
+    });
+    const carolSave = await fetchApp("/month/income", {
+      method: "POST",
+      headers: auth("token-c"),
+      body: JSON.stringify({ year: 2026, month: 8, expectedRevision: 1, amount: "9" }),
+    });
+    expect(carolSave.status).toBe(200);
+    const carol = await json(carolSave);
+    expect(carol.currency).toBe("GBP");
+    expect(carol.incomeMinor).toBe(900);
+    const alice = await json(await fetchApp("/month?year=2026&month=8", { headers: auth("token-a") }));
+    expect(alice.currency).toBe("EUR");
+    expect(alice.incomeMinor).toBe(300000);
+    expect(alice.householdId).not.toBe(carol.householdId);
+  });
+
+  it("does not reintroduce the Phase 1A custom auth module", async () => {
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(new URL("./auth.ts", import.meta.url))).toBe(false);
+    const signup = await fetchApp("/auth/sign-in", { method: "POST" });
+    expect(signup.status).toBe(404);
+  });
 });

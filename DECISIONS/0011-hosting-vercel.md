@@ -15,7 +15,8 @@ Phase 1A was LAN-only. Phase 1B needs a public HTTPS URL for two phones. The spi
 - Prefer **Vercel** (static + Node serverless `api/index.ts`) when a Vercel project is linked.
 - A single Node process (`SERVE_WEB=1 npm start`) is the fallback host.
 - Browser env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` only.
-- Server env: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`. Service role is test/ops only.
+- Server **runtime** env: `DATABASE_URL` (required — direct Postgres adapter), `SUPABASE_URL`, `SUPABASE_ANON_KEY`. Service role is test/ops only and is not required to run the app.
+- Migrations: `HOSTED_DATABASE_URL` or the same `DATABASE_URL` (session port 5432 if the pooler rejects migration SQL).
 
 ## Consequences
 

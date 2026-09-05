@@ -52,54 +52,96 @@ const MONTH_SQL = `
   JOIN categories c ON c.id = a.category_id
 `;
 
-export function createPostgresStore(pool: Pool): BudgetStore {
+/**
+ * Production persistence path. Every query runs in a transaction as
+ * role `authenticated` with the signed-in user's JWT claims so `auth.uid()`
+ * and RLS apply. The table-owner pool connection is only used to begin that
+ * transaction; it must not run household SQL as the login role.
+ */
+export function createPostgresStore(pool: Pool, userId: string): BudgetStore {
+  if (!userId) {
+    throw new Error("createPostgresStore requires the authenticated user id");
+  }
+
+  async function asUser<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [userId]);
+      await client.query("SELECT set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: userId, role: "authenticated" }),
+      ]);
+      await client.query("SELECT set_config('app.command_adapter', '1', true)");
+      await client.query("SET LOCAL ROLE authenticated");
+      const result = await fn(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        // Connection may already be aborted.
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   return {
     async insertHousehold(row) {
-      await pool.query("INSERT INTO households (id, currency) VALUES ($1, $2)", [
-        row.id,
-        row.currency,
-      ]);
+      await asUser((client) =>
+        client.query("INSERT INTO households (id, currency) VALUES ($1, $2)", [row.id, row.currency]),
+      );
     },
-    async insertMember(householdId, userId) {
-      await pool.query(
-        "INSERT INTO household_members (household_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-        [householdId, userId],
+    async insertMember(householdId, memberId) {
+      await asUser((client) =>
+        client.query(
+          "INSERT INTO household_members (household_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+          [householdId, memberId],
+        ),
       );
     },
     async findUserIdByEmail(email) {
-      const result = await pool.query<{ id: string }>(
-        "SELECT id FROM auth.users WHERE email = $1",
-        [email],
-      );
-      return result.rows[0]?.id ?? null;
+      return asUser(async (client) => {
+        const result = await client.query<{ id: string | null }>(
+          "SELECT private.user_id_for_email($1) AS id",
+          [email],
+        );
+        return result.rows[0]?.id ?? null;
+      });
     },
-    async isMember(householdId, userId) {
-      const result = await pool.query(
-        "SELECT 1 FROM household_members WHERE household_id = $1 AND user_id = $2",
-        [householdId, userId],
-      );
-      return (result.rowCount ?? 0) > 0;
+    async isMember(householdId, memberId) {
+      return asUser(async (client) => {
+        const result = await client.query(
+          "SELECT 1 FROM household_members WHERE household_id = $1 AND user_id = $2",
+          [householdId, memberId],
+        );
+        return (result.rowCount ?? 0) > 0;
+      });
     },
-    async householdIdForUser(userId) {
-      const result = await pool.query<{ household_id: string }>(
-        "SELECT household_id FROM household_members WHERE user_id = $1 LIMIT 1",
-        [userId],
-      );
-      return result.rows[0]?.household_id ?? null;
+    async householdIdForUser(memberId) {
+      return asUser(async (client) => {
+        const result = await client.query<{ household_id: string }>(
+          "SELECT household_id FROM household_members WHERE user_id = $1 LIMIT 1",
+          [memberId],
+        );
+        return result.rows[0]?.household_id ?? null;
+      });
     },
     async loadMonth(householdId, year, month) {
-      const result = await pool.query(MONTH_SQL + " WHERE m.household_id = $1 AND m.year = $2 AND m.month = $3", [
-        householdId,
-        year,
-        month,
-      ]);
-      const row = result.rows[0];
-      return row ? mapMonth(row) : null;
+      return asUser(async (client) => {
+        const result = await client.query(MONTH_SQL + " WHERE m.household_id = $1 AND m.year = $2 AND m.month = $3", [
+          householdId,
+          year,
+          month,
+        ]);
+        const row = result.rows[0];
+        return row ? mapMonth(row) : null;
+      });
     },
     async insertMonth(row) {
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
+      await asUser(async (client) => {
         await client.query(
           `INSERT INTO budget_months (id, household_id, year, month, income_minor, revision)
            VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -113,18 +155,10 @@ export function createPostgresStore(pool: Pool): BudgetStore {
           `INSERT INTO month_allocations (month_id, category_id, amount_minor) VALUES ($1, $2, $3)`,
           [row.monthId, row.categoryId, row.allocationMinor],
         );
-        await client.query("COMMIT");
-      } catch (error) {
-        await client.query("ROLLBACK");
-        throw error;
-      } finally {
-        client.release();
-      }
+      });
     },
     async updateMonth(monthId, expectedRevision, patch) {
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
+      return asUser(async (client) => {
         const updated = await client.query<{ id: string }>(
           `UPDATE budget_months
            SET income_minor = $1, revision = revision + 1
@@ -133,28 +167,21 @@ export function createPostgresStore(pool: Pool): BudgetStore {
           [patch.incomeMinor, monthId, expectedRevision],
         );
         if ((updated.rowCount ?? 0) === 0) {
-          await client.query("ROLLBACK");
           return null;
         }
-        await client.query(
-          `UPDATE month_allocations SET amount_minor = $1 WHERE month_id = $2`,
-          [patch.allocationMinor, monthId],
-        );
+        await client.query(`UPDATE month_allocations SET amount_minor = $1 WHERE month_id = $2`, [
+          patch.allocationMinor,
+          monthId,
+        ]);
         await client.query(
           `UPDATE categories SET name = $1
            WHERE id = (SELECT category_id FROM month_allocations WHERE month_id = $2)`,
           [patch.categoryName, monthId],
         );
-        await client.query("COMMIT");
-      } catch (error) {
-        await client.query("ROLLBACK");
-        throw error;
-      } finally {
-        client.release();
-      }
-      const loaded = await pool.query(MONTH_SQL + " WHERE m.id = $1", [monthId]);
-      const row = loaded.rows[0];
-      return row ? mapMonth(row) : null;
+        const loaded = await client.query(MONTH_SQL + " WHERE m.id = $1", [monthId]);
+        const row = loaded.rows[0];
+        return row ? mapMonth(row) : null;
+      });
     },
   };
 }

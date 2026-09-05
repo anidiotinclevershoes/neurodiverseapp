@@ -42,7 +42,7 @@ function errorBody(error: AppError): { error: string; message: string; current?:
 }
 
 export function createHttpApp(pool: Pool, verifyAccessToken: AccessTokenVerifier) {
-  const app = createBudgetApp(createPostgresStore(pool));
+  const appFor = (userId: string) => createBudgetApp(createPostgresStore(pool, userId));
   const http = new Hono<Env>();
 
   http.use(
@@ -63,6 +63,7 @@ export function createHttpApp(pool: Pool, verifyAccessToken: AccessTokenVerifier
 
   http.post("/households", async (c) => {
     const userId = c.get("userId");
+    const app = appFor(userId);
     const body = await c.req.json<{ currency?: string; year?: number; month?: number }>();
     try {
       const view = await app.createHousehold(
@@ -81,6 +82,7 @@ export function createHttpApp(pool: Pool, verifyAccessToken: AccessTokenVerifier
 
   http.post("/households/:id/members", async (c) => {
     const userId = c.get("userId");
+    const app = appFor(userId);
     const body = await c.req.json<{ email?: string }>();
     try {
       await app.addMember({ userId }, c.req.param("id"), body.email ?? "");
@@ -92,6 +94,7 @@ export function createHttpApp(pool: Pool, verifyAccessToken: AccessTokenVerifier
 
   http.get("/month", async (c) => {
     const userId = c.get("userId");
+    const app = appFor(userId);
     const year = Number(c.req.query("year") ?? utcYear());
     const month = Number(c.req.query("month") ?? utcMonth());
     try {
@@ -103,6 +106,7 @@ export function createHttpApp(pool: Pool, verifyAccessToken: AccessTokenVerifier
 
   http.post("/month/income", async (c) => {
     const userId = c.get("userId");
+    const app = appFor(userId);
     const body = await readMoneyBody(c);
     if (body instanceof Response) {
       return body;
@@ -126,6 +130,7 @@ export function createHttpApp(pool: Pool, verifyAccessToken: AccessTokenVerifier
 
   http.post("/month/save", async (c) => {
     const userId = c.get("userId");
+    const app = appFor(userId);
     const raw = (await c.req.json()) as Record<string, unknown>;
     try {
       return c.json(
@@ -148,6 +153,7 @@ export function createHttpApp(pool: Pool, verifyAccessToken: AccessTokenVerifier
 
   http.post("/month/allocation", async (c) => {
     const userId = c.get("userId");
+    const app = appFor(userId);
     const body = await readMoneyBody(c);
     if (body instanceof Response) {
       return body;

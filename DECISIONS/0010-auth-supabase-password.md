@@ -22,4 +22,4 @@ This supersedes the OTP-as-V1-primary clause of ADR 0005. The rest of 0005 (equa
 
 - First household can sign in without waiting for mail.
 - Hosted tests can create users with the Admin API and sign in with a password.
-- Email confirmation should be disabled (or auto-confirm) for the first-household project so `signUp` returns a session.
+- **Private V1 decision — revisit before any public or untrusted-user release.** Email confirmation stays disabled so `signUp` returns a session. This is intentional low friction for a trusted household, not an oversight. Isolation is RLS, not a mailbox click. Reassess confirmation and account-enumeration controls before any public launch. See ADR 0013.

@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
 **Status:** current  
-**Last verified:** 2026-08-31  
+**Last verified:** 2026-09-05  
 **Kind:** current system architecture
 
 If this file disagrees with code, **do not trust this file blindly**. Investigate, then change the code or this file, and record the reconciliation.
@@ -86,13 +86,16 @@ See `DECISIONS/0003-household-sync-manual-refresh.md`.
 
 ## Authorization
 
-See `DECISIONS/0005-auth-supabase.md`.
+See `DECISIONS/0005-auth-supabase.md`, `0010-auth-supabase-password.md`, and `0013-rls-scoped-runtime-persistence.md`.
 
 - Authentication: **Supabase Auth** email + password (ADR 0010). The API calls `getUser` on the access token. Phase 1A custom JWT is deleted.
-- Authorization: Postgres RLS on every exposed table. Policies check `auth.uid()` membership in `household_members`.
-- Role `authenticated` may SELECT. It must not UPDATE. Writes use the command API’s database role after a membership check.
+- How identity reaches Postgres: `getUser` yields `user.id`. The request builds `createPostgresStore(pool, userId)`. That adapter, on a held pool client, sets `request.jwt.claim.sub` and `request.jwt.claims` to that id, then `SET LOCAL ROLE authenticated`. Hosted `auth.uid()` reads those settings. It does **not** read the browser cookie by itself.
+- Authorization: Postgres RLS on every household table. Policies check `auth.uid()` membership via `private.member_household_ids()`. That is what blocks another household — not the application `isMember` check alone.
+- Role `authenticated` may SELECT, INSERT, and UPDATE household rows that RLS allows. Writes still go through the command adapter (revision `UPDATE … WHERE revision = $expected`). A trigger rejects writes unless `app.command_adapter=1`, so the Data API cannot skip revision checking.
+- The login role behind `DATABASE_URL` (often `postgres` on hosted Supabase) **can** bypass RLS if used directly. Production household SQL must not run as that role.
 - The browser never receives the service-role key or `DATABASE_URL`.
 - Client-supplied `household_id` is a parameter, not a permission.
+- **Private V1 decision — revisit before any public or untrusted-user release.** Email confirmation stays disabled for the trusted two-person household. Isolation does not depend on a confirmation click.
 
 ---
 
@@ -136,7 +139,7 @@ Not created yet: accounts, month_incomes lines, bills, extras, spend, processed_
 
 Phase 1A mapper supplies a synthetic payday account so `calculateBudget` can run without an accounts table.
 
-**Write path:** Hono command API. Role `ndapp_authenticated` has SELECT only. Membership is loaded from `household_members`, never from a client “I am a member” flag.
+**Write path:** Hono command API → per-request `createPostgresStore(pool, userId)` → transaction as `authenticated` + JWT claims → RLS. Membership is a `household_members` row, never a client “I am a member” flag. `DATABASE_URL` is required at runtime for this direct-Postgres adapter. It is also used for migrations and local CI. The browser does not use it.
 
 ## Application commands (Phase 1A)
 
@@ -154,7 +157,7 @@ Phase 1A mapper supplies a synthetic payday account so `calculateBudget` can run
 1. **UI → Application:** command objects with `householdId`, `monthId`, `expectedRevision`, money as integer minor units (or a parsed string that the application converts **before** the engine).
 2. **Application → Domain:** `BudgetInput` in, `BudgetResult` out. No partial/optional silent defaults that hide missing accounts.
 3. **Application → Persistence:** write inputs, then read back; compare revision.
-4. **Persistence → Auth/RLS:** reads as the user. Writes through the command path. Service role is never in the client.
+4. **Persistence → Auth/RLS:** the production adapter runs as `authenticated` with the signed-in `sub`. RLS is what isolates households. Service role is never in the client.
 5. **Reload contract:** GET after PUT returns the same authoritative inputs and the same derived result.
 6. **Second-member contract:** after refresh, member B’s `BudgetResult` equals member A’s.
 7. **Isolation contract:** household B’s queries return zero rows of household A’s data, including via guessed IDs. Missing-or-forbidden is **404**, not a leaky 403 that confirms the other household exists.
@@ -247,7 +250,7 @@ Out of V1: mandatory MFA, formal pentest program, HSM, field-level encryption at
 ```
 src/domain/              money + calculateBudget (unchanged)
 src/application/         createBudgetApp commands + MonthView mapping
-src/persistence/         Postgres store, migrations helper
+src/persistence/         user-scoped Postgres store (RLS runtime), migrations helper
 src/server/              Hono command API + Supabase getUser
 src/web/                 spine UI + supabase-js Auth
 api/                     Vercel Node entry for the same Hono app

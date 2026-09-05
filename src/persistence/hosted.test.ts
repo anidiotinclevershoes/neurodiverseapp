@@ -182,11 +182,11 @@ describeHosted("hosted Supabase auth + RLS", () => {
   });
 
   it("command path still owns calculateBudget mapping", async () => {
-    const app = createBudgetApp(createPostgresStore(pool));
     const aliceId = createdUserIds[0];
     if (!aliceId) {
       throw new Error("missing alice");
     }
+    const app = createBudgetApp(createPostgresStore(pool, aliceId));
     const view = await app.getMonth({ userId: aliceId }, 2026, 8);
     expect(view.unallocatedMinor + view.allocationMinor).toBe(view.incomeMinor);
   });

@@ -1,7 +1,7 @@
 # CHECKPOINT.md
 
 **Status:** current  
-**Last verified:** 2026-08-31  
+**Last verified:** 2026-09-05  
 **Kind:** current known-good state — start here before changing the codebase
 
 **verified_commit:** Phase 1B branch `cursor/phase-1b-production-spine-6d7b`
@@ -35,30 +35,42 @@ npm run dev              # API :3000 + Vite :5173
 
 - Phase 0 domain engine (unchanged).
 - Application commands unchanged: `createHousehold`, `addMember`, `getMonth`, `setIncome`, `setAllocation`, `saveMonth`.
-- Postgres adapter talks to `auth.users` for email lookup.
-- Command API verifies **Supabase Auth** access tokens (`getUser`). Custom JWT/password hashing is gone.
+- **Production persistence** is `createPostgresStore(pool, userId)`: each command runs in a transaction as Postgres role `authenticated` with the signed-in user's JWT claims. `auth.uid()` reads those claims. RLS is the isolation boundary.
+- Command API verifies **Supabase Auth** access tokens (`getUser`) and builds a **per-request** store for that `user.id`. Custom JWT/password hashing is gone.
 - Minimal mobile-first UI signs in with Supabase email + password.
-- RLS on household tables; `authenticated` has SELECT only. Writes stay on the command path.
+- Email confirmation is **intentionally disabled** for this trusted private two-person V1. Revisit before any public or untrusted-user release.
 
 ## What is proven locally (CI)
 
 - Same spine contracts as Phase 1A, with identity injected as a token verifier (stand-in for `getUser`).
-- Custom `/auth/sign-up` is gone (404). Junk tokens are 401.
+- The **same adapter used in production** cannot read or write another household.
+- Authenticated members succeed through that adapter; non-members cannot join another household through it.
+- Stale revision is still 409; failed persistence is still `UNAVAILABLE`.
+- Custom `/auth/sign-up` and `/auth/sign-in` are gone (404). Junk tokens are 401.
 - Local shim cannot be applied to a `supabase.co` URL.
 - Browser production build contains no service-role / JWT_SECRET strings.
 
 ## What hosted proof requires
 
-A live Supabase project + public deploy. Run `NDAPP_HOSTED_TESTS=1 npm test` against that project. Do not point hosted tests at the first household’s long-lived data if a separate test project exists.
+A live Supabase project + public deploy, **after** `npm run migrate:hosted` includes `20260905120000_phase1b_rls_runtime.sql`. Run `NDAPP_HOSTED_TESTS=1 npm test` against that project. Do not point hosted tests at the first household’s long-lived data if a separate test project exists.
 
 ## What is not this phase
 
-Payday transfers, bills, spend, OTP mail, native apps.
+Payday transfers, bills, spend, OTP mail, native apps, public-signup hardening, MFA, email-confirmation UX.
 
 ## Current architecture
 
-UI (Vite) → Supabase Auth session → Hono command API (`getUser`) → `createBudgetApp` → `calculateBudget` → hosted Postgres (or local CI Postgres). Manual refresh. See `ARCHITECTURE.md`.
+```
+browser Supabase session
+  → Hono getUser(access token)
+  → createBudgetApp(createPostgresStore(pool, userId))
+  → SET LOCAL ROLE authenticated + JWT claims
+  → auth.uid() → RLS
+  → calculateBudget
+```
+
+`DATABASE_URL` is required at **runtime** on the server (and for migrations/CI). It is not a browser variable. See `ARCHITECTURE.md` and ADR 0013.
 
 ## Next intended step
 
-Payday transfer slice after the hosted spine is accepted.
+Finish hosted deployment (owner secrets + migrate + Vercel). Payday only after the hosted spine is accepted.
