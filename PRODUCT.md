@@ -1,7 +1,7 @@
 # PRODUCT.md
 
 **Status:** current  
-**Last verified:** 2026-08-31  
+**Last verified:** 2026-09-05  
 **Kind:** current product truth (not a wishlist)
 
 NDApp is a mobile-first application that helps neurodivergent adults and parents reduce everyday executive-function burden.
@@ -150,4 +150,8 @@ Implemented now (narrow):
 - see unallocated / remaining / headline from the engine;
 - save, refresh, conflict and save-failed states.
 
-Still planned for later V1 slices: bills, accounts, payday transfers, spend, extras, OTP mail, hosted Supabase.
+Still planned for later V1 slices: bills, accounts, payday transfers, spend, extras.
+
+Phase 1B replaces Phase 1A custom JWT with Supabase Auth and targets a public HTTPS deploy. OTP mail is deferred (ADR 0010).
+
+**Private V1 decision — revisit before any public or untrusted-user release.** Email confirmation stays disabled so the trusted two-person household can create an account and sign in immediately. Household isolation is still enforced in Postgres RLS. Do not add a confirmation UX for this V1.

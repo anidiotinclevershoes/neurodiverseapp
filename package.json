@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "NDApp — household executive-function support. Phase 1A proves the architecture spine.",
+  "description": "NDApp — household executive-function support. Phase 1B hosts the proven spine.",
   "engines": {
     "node": ">=22"
   },
@@ -16,12 +16,14 @@
     "dev": "concurrently -k \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "tsx watch src/server/listen.ts",
     "dev:web": "vite",
-    "start:api": "tsx src/server/listen.ts"
+    "start:api": "tsx src/server/listen.ts",
+    "start": "SERVE_WEB=1 tsx src/server/listen.ts",
+    "migrate:hosted": "tsx scripts/apply-hosted-migrations.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
+    "@supabase/supabase-js": "^2.112.4",
     "hono": "^4.13.5",
-    "jose": "^6.2.10",
     "pg": "^8.23.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

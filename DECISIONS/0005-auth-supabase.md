@@ -1,6 +1,6 @@
 # 0005 — Auth: Supabase Auth, email OTP, equal members
 
-**Status:** accepted  
+**Status:** accepted (sign-in method superseded by `0010-auth-supabase-password.md`)  
 **Date:** 2026-08-31  
 **Kind:** current decision
 

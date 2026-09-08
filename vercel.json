@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/health", "destination": "/api" },
+    { "source": "/month", "destination": "/api" },
+    { "source": "/month/:path*", "destination": "/api" },
+    { "source": "/households", "destination": "/api" },
+    { "source": "/households/:path*", "destination": "/api" }
+  ]
+}

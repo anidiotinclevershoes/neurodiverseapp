@@ -1,7 +1,7 @@
 # TEST_STRATEGY.md
 
 **Status:** current  
-**Last verified:** 2026-08-31  
+**Last verified:** 2026-09-05  
 **Kind:** current test strategy
 
 ---
@@ -16,7 +16,7 @@ We do not chase a decorative pyramid. We test the places this product will actua
 | Application | Command handling, revision, mapping | Vitest (memory store) | Now |
 | Persistence | Writes, reload equality | Vitest + Postgres | Now |
 | Security | Household isolation, unauthenticated deny | Postgres RLS + HTTP | Now |
-| UI integration | Intent submitted matches command | Manual / browser | Phase 1A UI (thin) |
+| UI integration | Intent submitted matches command | Manual / browser | Thin spine UI |
 | E2E journey | Two-user refresh / isolation in a browser | Playwright | Later |
 | Native E2E | — | Not in V1 (web-first) | Only if we later wrap |
 
@@ -80,7 +80,7 @@ Named in domain tests and in this list. They live next to the engine in `src/dom
 | INV-09 | Currency mismatch and non-integer money throw rather than coerce |
 | INV-10 | Exactly one payday account; unknown account/category references throw |
 | INV-11 | Failed persistence must not be reported as success *(application: UNAVAILABLE; UI stays save-failed)* |
-| INV-12 | Household A cannot access household B *(Postgres RLS SELECT isolation + application NOT_FOUND)* |
+| INV-12 | Household A cannot access household B *(the production `createPostgresStore(pool, userId)` path, not only a standalone SET ROLE probe)* |
 | INV-13 | Membership is enforced server-side *(household_members + RLS; client “I am a member” is ignored)* |
 | INV-14 | Closed snapshots remain stable when live catalogues change *(persistence — not yet implemented)* |
 
@@ -90,13 +90,15 @@ Named in domain tests and in this list. They live next to the engine in `src/dom
 
 Defined in `.github/workflows/ci.yml`:
 
-| Gate | Phase 1A |
+| Gate | Phase 1B |
 | --- | --- |
 | `npm run typecheck` | Block |
 | `npm run lint` | Block |
 | Domain import isolation grep | Block |
-| `npm test` (domain + application + Postgres + HTTP when `DATABASE_URL` set; files run serially so schema resets do not collide) | Block |
+| `npm test` (domain + application + Postgres + HTTP; serial files) | Block |
 | `npm run build` | Block |
+| Browser bundle secret grep | Block |
+| Hosted Supabase suite | Optional when `vars.NDAPP_HOSTED_TESTS=1` |
 
 Advisory (do not block until they exist and are stable): coverage percentages, visual snapshots, lighthouse.
 
@@ -123,8 +125,10 @@ Do not add a coverage threshold that encourages dummy tests.
 
 ---
 
-## Phase 1A vs later
+## Phase 1B vs later
 
-**Phase 1A (done):** application command tests (real domain, memory port), Postgres round-trip, RLS isolation (SELECT + denied UPDATE), HTTP two-member journey, Vite build.
+**Local CI:** application commands, Postgres round-trip through the user-scoped production adapter, RLS as role `authenticated`, HTTP journey with an injected verifier (custom `/auth/*` gone), password sign-in path without a confirmation flow, Vite build, bundle secret grep.
 
-**When UI exists more fully:** Playwright two-session journey on real phones. The spine UI is exercised locally; it is not a CI E2E yet.
+**Hosted:** `src/persistence/hosted.test.ts` when `NDAPP_HOSTED_TESTS=1` — real `getUser`, PostgREST RLS, disposable users.
+
+**Later:** Playwright two-session on real phones.

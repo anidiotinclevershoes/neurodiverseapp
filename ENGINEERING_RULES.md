@@ -1,7 +1,7 @@
 # ENGINEERING_RULES.md
 
 **Status:** current  
-**Last verified:** 2026-08-31  
+**Last verified:** 2026-09-05  
 **Kind:** current engineering process (not historical)
 
 Agents and humans follow these rules when changing NDApp.

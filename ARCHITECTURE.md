@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
 **Status:** current  
-**Last verified:** 2026-08-31  
+**Last verified:** 2026-09-05  
 **Kind:** current system architecture
 
 If this file disagrees with code, **do not trust this file blindly**. Investigate, then change the code or this file, and record the reconciliation.
@@ -19,15 +19,16 @@ We are **not** building a generic ND life operating system.
 ## Layers
 
 ```
-UI  (Vite + React — Phase 1A spine only)
-  ↓  HTTP commands (JWT)
+UI  (Vite + React)
+  ↓  Supabase Auth session (access token)
+  ↓  HTTP commands
 Application / use cases   ← src/application/budget-app.ts
   ↓  BudgetInput  →  BudgetResult
 Budget domain engine
   ↓  BudgetStore port
 Postgres adapter          ← src/persistence/postgres.ts
   ↓
-PostgreSQL 16 (Supabase-shaped RLS; hosted Supabase not provisioned)
+Hosted Supabase Postgres  (CI: Postgres 16 + test-only auth.uid shim)
 ```
 
 ### Dependency rules
@@ -47,7 +48,7 @@ Deviation considered and rejected: putting remaining-amount math in SQL or in Re
 
 ## Data ownership
 
-**Authoritative:** server-side household records (Phase 1A: PostgreSQL 16; hosted Supabase still the intended production home).
+**Authoritative:** household rows in Postgres. Production: hosted Supabase. CI: local Postgres 16 with the same migrations.
 
 **Derived:** anything `calculateBudget` returns. Derived values may be stored as a cache or as a closed-month snapshot, but live months are always recomputable from inputs.
 
@@ -85,12 +86,16 @@ See `DECISIONS/0003-household-sync-manual-refresh.md`.
 
 ## Authorization
 
-See `DECISIONS/0005-auth-supabase.md`.
+See `DECISIONS/0005-auth-supabase.md`, `0010-auth-supabase-password.md`, and `0013-rls-scoped-runtime-persistence.md`.
 
-- Authentication: email + password JWT against `app_users` (Phase 1A). OTP remains the intended hosted path (ADR 0005, 0009).
-- Authorization: Postgres RLS on every exposed table. Policies check `auth.uid()` membership in `household_members`.
-- The browser never receives the service-role key.
+- Authentication: **Supabase Auth** email + password (ADR 0010). The API calls `getUser` on the access token. Phase 1A custom JWT is deleted.
+- How identity reaches Postgres: `getUser` yields `user.id`. The request builds `createPostgresStore(pool, userId)`. That adapter, on a held pool client, sets `request.jwt.claim.sub` and `request.jwt.claims` to that id, then `SET LOCAL ROLE authenticated`. Hosted `auth.uid()` reads those settings. It does **not** read the browser cookie by itself.
+- Authorization: Postgres RLS on every household table. Policies check `auth.uid()` membership via `private.member_household_ids()`. That is what blocks another household — not the application `isMember` check alone.
+- Role `authenticated` may SELECT, INSERT, and UPDATE household rows that RLS allows. Writes still go through the command adapter (revision `UPDATE … WHERE revision = $expected`). A trigger rejects writes unless `app.command_adapter=1`, so the Data API cannot skip revision checking.
+- The login role behind `DATABASE_URL` (often `postgres` on hosted Supabase) **can** bypass RLS if used directly. Production household SQL must not run as that role.
+- The browser never receives the service-role key or `DATABASE_URL`.
 - Client-supplied `household_id` is a parameter, not a permission.
+- **Private V1 decision — revisit before any public or untrusted-user release.** Email confirmation stays disabled for the trusted two-person household. Isolation does not depend on a confirmation click.
 
 ---
 
@@ -116,22 +121,25 @@ See `DECISIONS/0007-history-month-snapshots.md`.
 
 ---
 
-## Schema (Phase 1A actually created)
+## Schema (Phase 1B)
 
-Tables in `supabase/migrations/20260831200000_phase1a_spine.sql`:
+Migrations in `supabase/migrations/`:
 
-- `app_users`
 - `households`
-- `household_members`
+- `household_members` (`user_id` → `auth.users`)
 - `budget_months` (`income_minor`, `revision`, year, month)
 - `categories`
 - `month_allocations`
 
-Not created yet (still the V1 direction): accounts, month_incomes lines, bills, extras, spend, processed_commands, closed_snapshot.
+`app_users` was a Phase 1A temporary table and is dropped in `20260831220000_phase1b_auth_users.sql`.
+
+Local CI creates a compatible `auth.users` via `supabase/shims/auth_uid.sql`. That file must never run on hosted Supabase.
+
+Not created yet: accounts, month_incomes lines, bills, extras, spend, processed_commands, closed_snapshot.
 
 Phase 1A mapper supplies a synthetic payday account so `calculateBudget` can run without an accounts table.
 
-**Write path:** Hono command API. Role `ndapp_authenticated` has SELECT only. Membership is loaded from `household_members`, never from a client “I am a member” flag.
+**Write path:** Hono command API → per-request `createPostgresStore(pool, userId)` → transaction as `authenticated` + JWT claims → RLS. Membership is a `household_members` row, never a client “I am a member” flag. `DATABASE_URL` is required at runtime for this direct-Postgres adapter. It is also used for migrations and local CI. The browser does not use it.
 
 ## Application commands (Phase 1A)
 
@@ -149,7 +157,7 @@ Phase 1A mapper supplies a synthetic payday account so `calculateBudget` can run
 1. **UI → Application:** command objects with `householdId`, `monthId`, `expectedRevision`, money as integer minor units (or a parsed string that the application converts **before** the engine).
 2. **Application → Domain:** `BudgetInput` in, `BudgetResult` out. No partial/optional silent defaults that hide missing accounts.
 3. **Application → Persistence:** write inputs, then read back; compare revision.
-4. **Persistence → Auth/RLS:** reads as the user. Writes through the command path. Service role is never in the client.
+4. **Persistence → Auth/RLS:** the production adapter runs as `authenticated` with the signed-in `sub`. RLS is what isolates households. Service role is never in the client.
 5. **Reload contract:** GET after PUT returns the same authoritative inputs and the same derived result.
 6. **Second-member contract:** after refresh, member B’s `BudgetResult` equals member A’s.
 7. **Isolation contract:** household B’s queries return zero rows of household A’s data, including via guessed IDs. Missing-or-forbidden is **404**, not a leaky 403 that confirms the other household exists.
@@ -204,7 +212,7 @@ Implemented in Phase 1A. See `CHECKPOINT.md`. Two authenticated members share on
 
 Assets: household financial *plans* (income, bills, allocations, spend, notes), account emails, session tokens.
 
-Trust boundaries: browser UI | Hono command API | Postgres+RLS | `app_users` password JWT (hosted Supabase Auth later).
+Trust boundaries: browser UI | Supabase Auth | Hono command API | Postgres+RLS.
 
 | Threat | V1 control |
 | --- | --- |
@@ -212,7 +220,7 @@ Trust boundaries: browser UI | Hono command API | Postgres+RLS | `app_users` pas
 | Client sends another household’s id | Policy ignores the wish; returns zero rows |
 | Stolen publishable key | Expected public; useless without a user session and membership |
 | Stolen service role | Operational disaster — key never ships to clients; rotate if leaked |
-| Account takeover (email) | Password JWT today; OTP mail when hosted Supabase Auth is connected; no SMS recovery in V1 |
+| Account takeover (email) | Supabase Auth password; no SMS recovery in V1 |
 | Invite abuse | No public join codes; add member from an existing member session; unknown emails are a silent no-op |
 | Log leakage | Do not log amounts, tokens, or passwords at info level |
 | XSS stealing session | Standard web hygiene when UI exists (framework defaults, no `dangerouslySetInnerHTML` for notes without a later decision) |
@@ -237,14 +245,15 @@ Out of V1: mandatory MFA, formal pentest program, HSM, field-level encryption at
 | Invalid money string | Validation error, no write |
 | Migration mismatch | App must not boot against an unknown schema silently — fail startup/health when we have a server |
 
-## Phase 1A code map
+## Phase 1B code map
 
 ```
-src/domain/              money + calculateBudget (unchanged Phase 0 rules)
+src/domain/              money + calculateBudget (unchanged)
 src/application/         createBudgetApp commands + MonthView mapping
-src/persistence/         Postgres store, migrations helper
-src/server/              Hono command API + password JWT
-src/web/                 minimal mobile-first spine UI
-supabase/migrations/     Phase 1A schema + RLS
-supabase/shims/          auth.uid() for vanilla Postgres
+src/persistence/         user-scoped Postgres store (RLS runtime), migrations helper
+src/server/              Hono command API + Supabase getUser
+src/web/                 spine UI + supabase-js Auth
+api/                     Vercel Node entry for the same Hono app
+supabase/migrations/     schema + RLS
+supabase/shims/          local/CI auth.uid() + auth.users only
 ```

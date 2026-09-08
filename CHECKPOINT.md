@@ -1,60 +1,76 @@
 # CHECKPOINT.md
 
 **Status:** current  
-**Last verified:** 2026-08-31  
+**Last verified:** 2026-09-05  
 **Kind:** current known-good state — start here before changing the codebase
 
-**verified_commit:** 1a02e33 on `cursor/phase-1a-prove-the-spine-6d7b` (GitHub CI green)
+**verified_commit:** Phase 1B branch `cursor/phase-1b-production-spine-6d7b`
 
 ---
 
 ## Known-good commands
 
 ```bash
-# Postgres 16 required for persistence/RLS/HTTP tests
+# Merge-blocking local gates (Postgres 16 + auth shim)
 export DATABASE_URL=postgres://ndapp:ndapp@127.0.0.1:5432/ndapp
-export JWT_SECRET=dev-only-change-me
 npm install
-npm test          # domain + application + postgres RLS + HTTP journey
+npm test
 npm run typecheck
 npm run lint
 npm run build
-npm run dev       # API :3000 + Vite :5173
+
+# Hosted API + UI (requires a real Supabase project)
+export DATABASE_URL="$HOSTED_DATABASE_URL"
+export SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+export SUPABASE_ANON_KEY=...
+export VITE_SUPABASE_URL="$SUPABASE_URL"
+export VITE_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+npm run migrate:hosted   # committed SQL only — never the local auth shim
+npm run dev              # API :3000 + Vite :5173
 ```
 
-Fresh schema: first API start with `APPLY_SCHEMA=1` applies `supabase/shims/auth_uid.sql` then `supabase/migrations/20260831200000_phase1a_spine.sql` if `households` is missing. Tests reset and re-apply the schema themselves.
+`APPLY_SCHEMA=1` is local/CI only and is refused when `DATABASE_URL` is a `supabase.co` host.
 
 ## What exists
 
-- Phase 0 domain engine (unchanged financial rules).
-- Application commands: `createHousehold`, `addMember`, `getMonth`, `setIncome`, `setAllocation`, `saveMonth`.
-- Postgres persistence + RLS. Command API (Hono). Minimal mobile-first web UI.
-- Auth: email + password JWT (`app_users`). Add member by existing email (unknown emails are a silent no-op).
+- Phase 0 domain engine (unchanged).
+- Application commands unchanged: `createHousehold`, `addMember`, `getMonth`, `setIncome`, `setAllocation`, `saveMonth`.
+- **Production persistence** is `createPostgresStore(pool, userId)`: each command runs in a transaction as Postgres role `authenticated` with the signed-in user's JWT claims. `auth.uid()` reads those claims. RLS is the isolation boundary.
+- Command API verifies **Supabase Auth** access tokens (`getUser`) and builds a **per-request** store for that `user.id`. Custom JWT/password hashing is gone.
+- Minimal mobile-first UI signs in with Supabase email + password.
+- Email confirmation is **intentionally disabled** for this trusted private two-person V1. Revisit before any public or untrusted-user release.
 
-## What is proven
+## What is proven locally (CI)
 
-- Two authenticated users can share one household month.
-- Income + one allocation persist; reload matches; second member refresh matches.
-- Derived remaining / unallocated / headline come from `calculateBudget` only.
-- Another household cannot read this month (application NOT_FOUND isolation + RLS zero rows).
-- Role `ndapp_authenticated` cannot UPDATE budget tables.
-- Stale `expectedRevision` → CONFLICT; newer income preserved.
-- Failed store update → UNAVAILABLE; authoritative income stays at the previous value; retry works.
-- Unauthenticated HTTP `/month` is 401.
-- Domain tests remain green. Persistence tests run against real Postgres when `DATABASE_URL` is set.
-- GitHub CI (`Typecheck, lint, tests, build` with Postgres 16) is green on this commit.
+- Same spine contracts as Phase 1A, with identity injected as a token verifier (stand-in for `getUser`).
+- The **same adapter used in production** cannot read or write another household.
+- Authenticated members succeed through that adapter; non-members cannot join another household through it.
+- Stale revision is still 409; failed persistence is still `UNAVAILABLE`.
+- Custom `/auth/sign-up` and `/auth/sign-in` are gone (404). Junk tokens are 401.
+- Local shim cannot be applied to a `supabase.co` URL.
+- Browser production build contains no service-role / JWT_SECRET strings.
 
-## What is not proven
+## What hosted proof requires
 
-- Hosted Supabase Auth / OTP email.
-- iPhone 13 / Nothing Phone on a public URL (app is local `npm run dev`).
-- Bills, spend, extra transfers, payday checklist.
-- Invite confirm-join (member is added when their email already has an account).
+A live Supabase project + public deploy, **after** `npm run migrate:hosted` includes `20260905120000_phase1b_rls_runtime.sql`. Run `NDAPP_HOSTED_TESTS=1 npm test` against that project. Do not point hosted tests at the first household’s long-lived data if a separate test project exists.
+
+## What is not this phase
+
+Payday transfers, bills, spend, OTP mail, native apps, public-signup hardening, MFA, email-confirmation UX.
 
 ## Current architecture
 
-UI (Vite/React) → Hono command API (JWT) → `createBudgetApp` → `calculateBudget` → Postgres (RLS on SELECT; writes via server role after membership check). Manual refresh. No realtime. See `ARCHITECTURE.md`.
+```
+browser Supabase session
+  → Hono getUser(access token)
+  → createBudgetApp(createPostgresStore(pool, userId))
+  → SET LOCAL ROLE authenticated + JWT claims
+  → auth.uid() → RLS
+  → calculateBudget
+```
+
+`DATABASE_URL` is required at **runtime** on the server (and for migrations/CI). It is not a browser variable. See `ARCHITECTURE.md` and ADR 0013.
 
 ## Next intended step
 
-Payday transfer slice: accounts + bills, derived recommended moves, still no bank connections. Do not start that until this spine PR is accepted.
+Finish hosted deployment (owner secrets + migrate + Vercel). Payday only after the hosted spine is accepted.
