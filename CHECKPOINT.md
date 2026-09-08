@@ -1,7 +1,7 @@
 # CHECKPOINT.md
 
 **Status:** current  
-**Last verified:** 2026-09-05  
+**Last verified:** 2026-09-08  
 **Kind:** current known-good state — start here before changing the codebase
 
 **verified_commit:** Phase 1B branch `cursor/phase-1b-production-spine-6d7b`
@@ -29,6 +29,8 @@ npm run migrate:hosted   # committed SQL only — never the local auth shim
 npm run dev              # API :3000 + Vite :5173
 ```
 
+`npm run build` also bundles the Vercel Node function (`api/index.js`) from `src/server/vercel-entry.ts`. That artifact must not import `.ts` files; CI loads it with Node.
+
 `APPLY_SCHEMA=1` is local/CI only and is refused when `DATABASE_URL` is a `supabase.co` host.
 
 ## What exists
@@ -49,6 +51,7 @@ npm run dev              # API :3000 + Vite :5173
 - Custom `/auth/sign-up` and `/auth/sign-in` are gone (404). Junk tokens are 401.
 - Local shim cannot be applied to a `supabase.co` URL.
 - Browser production build contains no service-role / JWT_SECRET strings.
+- The Vercel function artifact is a bundled `api/index.js`. Node can load it without `.ts` imports; `/health` is 200 and `/households` reaches application auth (401 when signed out).
 
 ## What hosted proof requires
 

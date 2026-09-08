@@ -1,7 +1,7 @@
 # KNOWN_ISSUES.md
 
 **Status:** current  
-**Last verified:** 2026-09-05  
+**Last verified:** 2026-09-08  
 **Kind:** current debt, bugs, and concerns (not a changelog)
 
 ---
@@ -34,7 +34,7 @@ None known in the local Phase 1B gates.
 | ID | Item | Severity | Notes |
 | --- | --- | --- | --- |
 | AC-01 | Hosted project must be provisioned outside this repo | Medium | Code is ready; secrets are not committed |
-| AC-03 | Public URL depends on linking a host (Vercel or `SERVE_WEB=1`) | Medium | `vercel.json` + `api/index.ts` are in tree |
+| AC-03 | Public URL depends on linking a host (Vercel or `SERVE_WEB=1`) | Medium | Vite static + bundled `api/index.js` from `src/server/vercel-entry.ts` |
 | AC-05 | `private.member_household_ids` is SECURITY DEFINER | Info | Unchanged; not in `public` |
 | AC-06 | Supabase Auth may still reveal registered emails on sign-up | Low | Platform behaviour; we do not add our own user table |
 

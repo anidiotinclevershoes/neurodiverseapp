@@ -1,7 +1,7 @@
 import { handle } from "hono/vercel";
 import pg from "pg";
-import { createHttpApp } from "../src/server/http.ts";
-import { createSupabaseVerifier } from "../src/server/supabase-auth.ts";
+import { createHttpApp } from "./http.ts";
+import { createSupabaseVerifier } from "./supabase-auth.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
 const supabaseUrl = process.env.SUPABASE_URL;

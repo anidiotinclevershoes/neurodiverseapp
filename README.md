@@ -40,7 +40,7 @@ Do not paste secrets into chat. Service role is optional (hosted tests / admin o
 2. Put browser env on Vercel: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` (same URL and anon key).
 3. From a machine that can reach the database: `npm run migrate:hosted` (session URI port 5432 if the pooler rejects migration SQL).
 4. Leave **Confirm email** disabled in Supabase Auth (private V1).
-5. Deploy this branch (Vite, Node 22). Send the public URL when it is up.
+5. Deploy this branch (Vite, Node 22). `npm run build` must emit `api/index.js` (Vercel cannot load `.ts` imports). Send the public URL when it is up.
 6. Two-phone smoke: both members see the same August 2026 figures; a third account does not.
 
 Phase 1A custom JWT / `app_users` / `JWT_SECRET` are already deleted. The local auth shim stays for CI only.

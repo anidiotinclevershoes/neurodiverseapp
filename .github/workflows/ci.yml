@@ -42,6 +42,10 @@ jobs:
           fi
       - run: npm test
       - run: npm run build
+      - name: Vercel function must not import TypeScript source
+        run: npm run check:vercel-function
+      - name: Committed Vercel function must match the build
+        run: git diff --exit-code -- api/index.js
       - name: Browser bundle must not contain privileged secrets
         run: |
           if grep -R -n -E "service_role|SUPABASE_SERVICE_ROLE|JWT_SECRET" dist; then

@@ -12,7 +12,7 @@ Phase 1A was LAN-only. Phase 1B needs a public HTTPS URL for two phones. The spi
 
 - Ship the UI as a Vite static build.
 - Ship the same Hono command API (`createHttpApp`) as a Node server.
-- Prefer **Vercel** (static + Node serverless `api/index.ts`) when a Vercel project is linked.
+- Prefer **Vercel** (static Vite build + Node serverless function). The function is **bundled** from `src/server/vercel-entry.ts` into `api/index.js` at build time. Vercel’s transpile-only emit would leave `.ts` imports that Node cannot load.
 - A single Node process (`SERVE_WEB=1 npm start`) is the fallback host.
 - Browser env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` only.
 - Server **runtime** env: `DATABASE_URL` (required — direct Postgres adapter), `SUPABASE_URL`, `SUPABASE_ANON_KEY`. Service role is test/ops only and is not required to run the app.
@@ -21,5 +21,6 @@ Phase 1A was LAN-only. Phase 1B needs a public HTTPS URL for two phones. The spi
 ## Consequences
 
 - Same-origin `/month` and `/households` avoid CORS on the public site.
+- `npm run build` emits the SPA and the Node function. CI loads that function with Node (not tsx) so a `.ts` import cannot pass.
 - Rollback is a previous deploy, not a schema undo.
 - Local `npm run dev` still proxies the API; production does not need `VITE_API_URL`.
