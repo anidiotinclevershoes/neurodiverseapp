@@ -1,7 +1,7 @@
 # TEST_STRATEGY.md
 
 **Status:** current  
-**Last verified:** 2026-09-05  
+**Last verified:** 2026-09-08  
 **Kind:** current test strategy
 
 ---
@@ -96,8 +96,9 @@ Defined in `.github/workflows/ci.yml`:
 | `npm run lint` | Block |
 | Domain import isolation grep | Block |
 | `npm test` (domain + application + Postgres + HTTP; serial files) | Block |
-| `npm run build` | Block |
+| `npm run build` | Block (SPA + bundled Vercel function; Node probe of `/health` and `/households`) |
 | Browser bundle secret grep | Block |
+| Vercel function `.ts` import check | Block (`npm run check:vercel-function`, also part of `npm run build`) |
 | Hosted Supabase suite | Optional when `vars.NDAPP_HOSTED_TESTS=1` |
 
 Advisory (do not block until they exist and are stable): coverage percentages, visual snapshots, lighthouse.
@@ -127,7 +128,7 @@ Do not add a coverage threshold that encourages dummy tests.
 
 ## Phase 1B vs later
 
-**Local CI:** application commands, Postgres round-trip through the user-scoped production adapter, RLS as role `authenticated`, HTTP journey with an injected verifier (custom `/auth/*` gone), password sign-in path without a confirmation flow, Vite build, bundle secret grep.
+**Local CI:** application commands, Postgres round-trip through the user-scoped production adapter, RLS as role `authenticated`, HTTP journey with an injected verifier (custom `/auth/*` gone), password sign-in path without a confirmation flow, Vite build, bundled Vercel function loaded with Node (no `.ts` imports), bundle secret grep.
 
 **Hosted:** `src/persistence/hosted.test.ts` when `NDAPP_HOSTED_TESTS=1` — real `getUser`, PostgREST RLS, disposable users.
 

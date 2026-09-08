@@ -1,4 +1,6 @@
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "rewrites": [
     { "source": "/health", "destination": "/api" },
     { "source": "/month", "destination": "/api" },

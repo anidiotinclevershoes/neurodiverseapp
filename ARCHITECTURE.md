@@ -1,7 +1,7 @@
 # ARCHITECTURE.md
 
 **Status:** current  
-**Last verified:** 2026-09-05  
+**Last verified:** 2026-09-08  
 **Kind:** current system architecture
 
 If this file disagrees with code, **do not trust this file blindly**. Investigate, then change the code or this file, and record the reconciliation.
@@ -253,7 +253,7 @@ src/application/         createBudgetApp commands + MonthView mapping
 src/persistence/         user-scoped Postgres store (RLS runtime), migrations helper
 src/server/              Hono command API + Supabase getUser
 src/web/                 spine UI + supabase-js Auth
-api/                     Vercel Node entry for the same Hono app
+api/                     generated Vercel Node entry (`api/index.js` from `src/server/vercel-entry.ts`)
 supabase/migrations/     schema + RLS
 supabase/shims/          local/CI auth.uid() + auth.users only
 ```
